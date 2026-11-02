@@ -6,6 +6,7 @@ qui tournent sur la machine de GitHub avec le moteur CTranslate2. Ils sont prép
   - titres et résumés : dans l'édition du jour (champ "tr"), publics comme les originaux ;
   - textes complets : chiffrés avec le code de lecture, comme les originaux → app/data/texts-fr/AAAA-MM-JJ.bin
 """
+import html
 import os
 import re
 import sys
@@ -27,8 +28,19 @@ def split(paragraph):
     return [s.strip() for s in SENT_RE.split(paragraph) if s.strip()]
 
 
-TR_VERSION = 2
+TR_VERSION = 3
 WORD_RE = re.compile(r"[A-Za-zÀ-ÿ][\w'’-]*")
+
+
+ELISION_RE = re.compile(r"(?<=[A-Za-zÀ-ÿ])\s*['’]\s*(?=[A-Za-zÀ-ÿ])")
+
+
+def tidy(text):
+    """Sortie du modèle → texte propre : « L &apos; Agence » (codes hérités de ses données d'entraînement) → « L'Agence »."""
+    text = html.unescape(html.unescape(text))
+    text = re.sub(r"'{2,}", "'", text)
+    text = ELISION_RE.sub("'", text)
+    return re.sub(r"\s+([,.])", r"\1", re.sub(r"\s{2,}", " ", text)).strip()
 
 
 def vocabulary(texts):
@@ -96,7 +108,7 @@ class Translator:
         for i in range(0, len(sentences), BATCH):
             pieces = [p[:250] + ["</s>"] for p in sp.encode(sentences[i:i + BATCH], out_type=str)]
             results = engine.translate_batch(pieces, beam_size=beam, max_decoding_length=320)
-            out += ["".join(r.hypotheses[0]).replace("▁", " ").strip() for r in results]
+            out += [tidy("".join(r.hypotheses[0]).replace("▁", " ")) for r in results]
         return out
 
     def translate(self, texts, src, beam=4):
@@ -176,6 +188,8 @@ def update(days, tr):
             done = decrypt(key, fpath.read_bytes()) if fpath.exists() else {}
         except Exception:
             done = {}
+        if done.get("_v") != TR_VERSION:
+            done = {}  # traductions d'une version précédente : refaites
         langs = {a["id"]: source_lang(reg, a) for reg, lst in ed["regions"].items() for a in lst}
         fresh = 0
         for i, t in texts.items():
@@ -191,10 +205,11 @@ def update(days, tr):
             except Exception as e:
                 log(f"  Traduction des textes {src} → fr impossible : {type(e).__name__} {str(e)[:120]}")
         done = {i: t for i, t in done.items() if i in texts}
-        if fresh or (done and not fpath.exists()):
+        texts_done += len(done)
+        done["_v"] = TR_VERSION
+        if fresh or not fpath.exists():
             fpath.parent.mkdir(parents=True, exist_ok=True)
             fpath.write_bytes(encrypt(key, done))
-        texts_done += len(done)
     log(f"Traduction : {titles} titres et résumés, {texts_done} textes complets disponibles en français "
         f"({tr.sentences} phrases traduites en {tr.seconds:.0f} s)" + (" — temps écoulé, la suite au prochain passage" if limited else ""))
 
