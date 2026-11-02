@@ -27,16 +27,42 @@ def split(paragraph):
     return [s.strip() for s in SENT_RE.split(paragraph) if s.strip()]
 
 
-def prepare():
-    """Télécharge les modèles OPUS-MT et les convertit pour CTranslate2 (une fois : le résultat est mis en cache)."""
-    import ctranslate2.converters
-    for src, name in OPUS.items():
-        out = MODELS / f"opus-{src}-fr"
-        if (out / "model.bin").exists():
-            continue
-        log(f"Préparation du modèle de traduction {name}")
-        ctranslate2.converters.TransformersConverter(name, copy_files=["source.spm", "target.spm"]).convert(
-            str(out), quantization="int8", force=True)
+TR_VERSION = 2
+WORD_RE = re.compile(r"[A-Za-zÀ-ÿ][\w'’-]*")
+
+
+def vocabulary(texts):
+    """Mots vus en minuscules, et mots vus avec une majuscule en milieu de phrase (noms propres), dans des textes normaux."""
+    lower, proper = set(), set()
+    for t in texts:
+        for m in WORD_RE.finditer(t or ""):
+            w = m.group(0)
+            if w[0].islower():
+                lower.add(w)
+            elif m.start() and not re.search(r"[.!?:«\"“—–-]\s*$", t[:m.start()]):
+                proper.add(w)
+    return lower, proper
+
+
+def sentence_case(title, vocab):
+    """Titres anglais « Title Case » (« Nine Killed In Florida Jet Crash ») → casse normale, que le modèle de traduction
+    comprend mieux. Seuls les mots courants (vus en minuscules dans les résumés du jour) perdent leur majuscule."""
+    words = WORD_RE.findall(title)
+    long_words = [w for w in words if len(w) > 3]
+    if len(long_words) < 3 or sum(w[0].isupper() for w in long_words) / len(long_words) < 0.7:
+        return title
+    lower, proper = vocab
+
+    def fix(m):
+        w = m.group(0)
+        start = not re.search(r"\w", title[:m.start()]) or re.search(r"[.!?:]\s*$", title[:m.start()])
+        wl = w.lower()
+        forms = {wl, wl[:-1] if wl.endswith(("s", "d")) else wl, wl[:-2] if wl.endswith(("es", "ed")) else wl,
+                 wl[:-3] if wl.endswith("ing") else wl}  # « Crashes », « Killed », « Killing » → crash, kill
+        if start or not w[0].isupper() or w.isupper() or w in proper or not any(len(f) > 2 and f in lower for f in forms):
+            return w
+        return wl
+    return WORD_RE.sub(fix, title)
 
 
 class Translator:
@@ -108,18 +134,28 @@ def update(days, tr):
         if not ed:
             continue
         arts = [(reg, a) for reg, lst in ed["regions"].items() for a in lst]
+        english = {a["id"] for reg, a in arts if source_lang(reg, a) == "en"}
+        full = {}
+        tpath = DATA / "texts" / f"{d.isoformat()}.bin"
+        if key and tpath.exists():
+            try:
+                full = decrypt(key, tpath.read_bytes())
+            except Exception:
+                full = {}
+        vocab = vocabulary([a.get("summary") for reg, a in arts if a["id"] in english] + [t for i, t in full.items() if i in english])
         changed = False
         for src in ("en", "es"):
-            items = [a for reg, a in arts if "tr" not in a and source_lang(reg, a) == src]
+            items = [a for reg, a in arts if a.get("tr", {}).get("v") != TR_VERSION and source_lang(reg, a) == src]
             if not items:
                 continue
             try:
-                out = tr.translate([x for a in items for x in (a["title"], a.get("summary") or "")], src)
+                out = tr.translate([x for a in items for x in (sentence_case(a["title"], vocab) if src == "en" else a["title"],
+                                                               a.get("summary") or "")], src)
             except Exception as e:
                 log(f"  Traduction {src} → fr impossible : {type(e).__name__} {str(e)[:120]}")
                 continue
             for i, a in enumerate(items):
-                a["tr"] = {"t": out[2 * i], "s": out[2 * i + 1], "l": src}
+                a["tr"] = {"t": out[2 * i], "s": out[2 * i + 1], "l": src, "v": TR_VERSION}
             log(f"  ex. ({src}) {items[0]['title'][:70]} → {out[0][:70]}")
             titles += len(items)
             changed = True
