@@ -1,7 +1,7 @@
 /* ACTU — application web installable. Aucune donnée n'est stockée sur le téléphone hormis vos réglages. */
 'use strict';
 
-const VERSION = '1.3.0';
+const VERSION = '1.4.0';
 const DATA = 'data/';
 const REGIONS = {
   fr: { label: 'France', flag: '🇫🇷', color: 'var(--fr)', ink: '#fff' },
@@ -138,6 +138,14 @@ function regionPrefs() {
   return list;
 }
 
+/* Traduction en français (option des Réglages) : faite chaque matin par le robot, gratuitement (Argos Translate). */
+const LANG_FROM = { en: 'de l’anglais', es: 'de l’espagnol' };
+function translating() { return store.get('translate', false); }
+/** Titre et résumé à afficher : la traduction française si elle est demandée (réglage, ou bouton de l'article). */
+function shown(a, useTr = translating()) {
+  return useTr && a.tr ? { title: a.tr.t || a.title, summary: a.tr.s || a.summary, lang: a.tr.l } : { title: a.title, summary: a.summary, lang: null };
+}
+
 const rxCache = new Map();
 function customRx(t) {
   const key = t.id + '|' + t.keywords.join(',');
@@ -254,6 +262,7 @@ function renderDay(day, isFirst) {
 }
 
 function articleSlide(a, region, i, n, date) {
+  const t = shown(a);
   const el = document.createElement('article');
   el.className = 'slide';
   el.style.setProperty('--rc', REGIONS[region].color);
@@ -268,9 +277,9 @@ function articleSlide(a, region, i, n, date) {
       <span class="pill">${esc(dayLabel(date))}</span>
     </header>
     <div class="slide-body">
-      <div class="meta"><b>${esc(a.source)}</b><span class="dot">${esc(when(a.date))}</span></div>
-      <h2 class="headline">${esc(a.title)}</h2>
-      ${a.summary ? `<p class="dek">${esc(a.summary)}</p>` : ''}
+      <div class="meta"><b>${esc(a.source)}</b><span class="dot">${esc(when(a.date))}</span>${t.lang ? '<span class="dot">traduit</span>' : ''}</div>
+      <h2 class="headline">${esc(t.title)}</h2>
+      ${t.summary ? `<p class="dek">${esc(t.summary)}</p>` : ''}
       <div class="chips">${chipsHTML(themesOf(a))}</div>
       <div class="cta">${a.full ? 'Lire l’article en entier' : 'Lire l’article'}<svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></div>
     </div>
@@ -310,16 +319,19 @@ function closeSheet(fromHistory = false) {
   if (!fromHistory && history.state?.sheet) history.back();
 }
 
-function openArticle(a, region, date) {
+function openArticle(a, region, date, opts = {}) {
   const r = REGIONS[region];
+  const useTr = !!a.tr && (opts.tr ?? translating());
+  const t = shown(a, useTr);
   const unavailable = a.full === false
     ? `<p class="small">${a.paywall ? 'Ce journal réserve cet article à ses abonnés : il se lit sur son site.' : 'Ce journal ne permet pas la lecture dans ACTU : l’article se lit sur son site.'}</p>` : '';
   openSheet(`
     ${a.image ? `<img class="hero" data-src="${esc(a.image)}" alt="" referrerpolicy="no-referrer">` : ''}
     <div class="sheet-content" style="--rc:${r.color};--ink:${r.ink}">
       <div class="meta"><span class="pill region">${r.flag} ${r.label}</span><b>${esc(a.source)}</b><span class="dot">${esc(cap(fmtLong.format(new Date(a.date))))} à ${esc(fmtTime.format(new Date(a.date)))}</span></div>
-      <h1>${esc(a.title)}</h1>
-      ${a.summary ? `<p class="lead">${esc(a.summary)}</p>` : ''}
+      ${a.tr ? `<div class="tr-bar">${useTr ? `🌐 Traduit automatiquement ${LANG_FROM[a.tr.l] || ''}` : '🌐 Article en langue étrangère'}<button class="btn" data-tr>${useTr ? 'Voir l’original' : 'Traduire en français'}</button></div>` : ''}
+      <h1>${esc(t.title)}</h1>
+      ${t.summary ? `<p class="lead">${esc(t.summary)}</p>` : ''}
       <div class="chips" style="margin-bottom:18px">${chipsHTML(themesOf(a), 4)}</div>
       <div id="fulltext">${a.full ? '<p class="status">Chargement de l’article…</p>' : ''}</div>
       <a class="btn ${a.full ? '' : 'primary'}" href="${href(a.url)}" target="_blank" rel="noopener">${a.full ? 'Voir l’article sur le site de ' : 'Lire l’article sur '}${esc(a.source)}<svg viewBox="0 0 24 24"><use href="#i-ext"/></svg></a>
@@ -334,9 +346,10 @@ function openArticle(a, region, date) {
         : '<p class="small">Aucune publication pertinente des chaînes d’information et créateurs suivis (HugoDécrypte, Ulyces, franceinfo, Le Monde, AFP…) pour l’instant. ACTU vérifie à nouveau chaque matin.</p>'}
     </div>`, (body) => {
     $('[data-share]', body).addEventListener('click', () => share(a.title, a.url));
+    $('[data-tr]', body)?.addEventListener('click', () => openArticle(a, region, date, { tr: !useTr }));
     bindPosts(body);
-    if (a.full) showFullText(a, date, $('#fulltext', body));
-    playStory(a, region, date, $('.mm-box', body));
+    if (a.full) showFullText(a, date, $('#fulltext', body), useTr);
+    playStory(a, region, date, $('.mm-box', body), useTr);
   });
 }
 
@@ -414,12 +427,26 @@ function storyFrom(a, region, date) {
     sources: [a.source, ...(a.also || [])],
   };
 }
-async function playStory(a, region, date, box) {
+async function playStory(a, region, date, box, useTr = false) {
   let story = null;
   if (reader.code()) { try { story = (await reader.stories(date))[a.id] || null; } catch { story = null; } }
-  story = story || storyFrom(a, region, date);
+  if (story && useTr) story = translatedStory(story);
+  const t = shown(a, useTr);
+  story = story || storyFrom({ ...a, title: t.title, summary: t.summary }, region, date);
   if (!box.isConnected) return;
   MindMap.mount(box, story, { color: REGIONS[region].color, onRelated: openRelated });
+}
+/** Le schéma avec ses textes traduits par le robot (phrases de l'article, fiches Wikipédia étrangères). */
+function translatedStory(st) {
+  const tr = st.tr;
+  if (!tr) return st;
+  return {
+    ...st,
+    captions: { ...st.captions, quoi: tr.quoi || st.captions?.quoi, liens: tr.liens || st.captions?.liens },
+    consequences: (st.consequences || []).map((c, i) => ({ ...c, text: tr.cons?.[i] || c.text })),
+    actors: (st.actors || []).map((x, i) => (x.wiki && tr.act?.[i] ? { ...x, wiki: { ...x.wiki, x: tr.act[i] } } : x)),
+    context: st.context && tr.ctx ? { ...st.context, x: tr.ctx } : st.context,
+  };
 }
 /** Un article lié (jours précédents) touché dans le schéma : on l'ouvre. */
 async function openRelated(rel) {
@@ -430,19 +457,26 @@ async function openRelated(rel) {
   } catch { toast('Hors connexion'); }
 }
 
-async function showFullText(a, date, box) {
+async function showFullText(a, date, box, useTr = false) {
   if (!reader.code()) {
     box.innerHTML = '<div class="unlock"><p>Le texte complet de cet article se lit directement dans ACTU.</p><button class="btn primary" data-action="settings">Saisir mon code de lecture</button></div>';
     return;
   }
   try {
-    const text = (await reader.texts(date))[a.id];
+    let text = (await reader.texts(date))[a.id];
     if (!text) { box.innerHTML = ''; return; }
+    let note = '', translated = false;
+    if (useTr) {
+      let fr = '';
+      try { fr = (await reader.load('texts-fr', date))[a.id] || ''; } catch { fr = ''; }
+      if (fr) { text = fr; translated = true; note = ' · traduction automatique'; }
+      else note = ' · traduction du texte complet pas encore prête, texte original';
+    }
     let paras = text.split('\n').filter(Boolean);
-    const lead = norm(a.summary).trim().slice(0, 40);
+    const lead = norm(shown(a, translated).summary).trim().slice(0, 40);
     if (lead && paras.length && norm(paras[0]).trim().startsWith(lead)) paras = paras.slice(1);
     box.innerHTML = `<div class="article-text">${paras.map((p) => `<p>${esc(p)}</p>`).join('')}
-      <p class="small">Texte © ${esc(a.source)} · copie privée pour votre lecture personnelle.</p></div>`;
+      <p class="small">Texte © ${esc(a.source)} · copie privée pour votre lecture personnelle${note}.</p></div>`;
   } catch (e) {
     const msg = { badcode: 'Code de lecture incorrect : vérifiez-le dans Réglages.', old: 'Mettez à jour iOS (16.4 ou plus) pour lire les articles ici.', nocode: '' }[e.message];
     box.innerHTML = `<p class="small">${msg ?? 'Texte indisponible pour le moment (connexion ?).'}</p>`;
@@ -540,7 +574,7 @@ function renderExplore() {
   const source = $('#ex-source').value;
   const sort = $('#ex-sort').value;
   let items = ex.items.filter((it) => (!region || it.region === region) && (!source || it.a.source === source) &&
-    (!ex.theme || themesOf(it.a).includes(ex.theme)) && (!q || norm(it.a.title + ' ' + it.a.summary + ' ' + it.a.source).includes(' ' + q)));
+    (!ex.theme || themesOf(it.a).includes(ex.theme)) && (!q || norm(it.a.title + ' ' + it.a.summary + ' ' + it.a.source + ' ' + (it.a.tr ? it.a.tr.t + ' ' + it.a.tr.s : '')).includes(' ' + q)));
   const order = allThemes().map((t) => t.id);
   const keyOf = {
     date: (it) => dayLabel(it.date), 'date-asc': (it) => dayLabel(it.date), score: () => '',
@@ -571,7 +605,7 @@ function renderExplore() {
       ${it.a.image ? `<img class="thumb" data-src="${esc(it.a.image)}" alt="" referrerpolicy="no-referrer">` : `<span class="thumb ph">${esc(it.a.source.charAt(0))}</span>`}
       <span class="txt">
         <span class="m"><span class="rdot"></span>${r.label} · <b>${esc(it.a.source)}</b> · ${esc(when(it.a.date))}${it.top ? ' · <b style="color:var(--accent)">À la une</b>' : ''}</span>
-        <span class="t">${esc(it.a.title)}</span>
+        <span class="t">${esc(shown(it.a).title)}</span>
         <span class="chips">${chipsHTML(themesOf(it.a), 2)}</span>
       </span></button>`;
   });
@@ -838,6 +872,9 @@ function openSettings() {
       <button class="icon-btn" data-move="-1" aria-label="Monter"${i === 0 ? ' disabled' : ''}>↑</button>
       <button class="icon-btn" data-move="1" aria-label="Descendre"${i === all.length - 1 ? ' disabled' : ''}>↓</button>
     </div>`).join('')}</div>
+    <h3>Traduction</h3>
+    <p class="small">Lire en français les articles en anglais (Europe, États-Unis) et en espagnol (Amérique latine) : titres, résumés, textes complets et schémas. Traduction automatique et gratuite, préparée chaque matin par le robot. Dans chaque article, un bouton permet de revenir au texte d’origine.</p>
+    <div class="reg-row" id="st-translate"><button class="chip" data-tog aria-pressed="${translating()}"><span class="nm">🌐 Traduire en français</span><em>${translating() ? 'Activée' : 'Désactivée'}</em></button></div>
     <h3>Lecture intégrale</h3>
     <p class="small">Votre code de lecture personnel permet de lire les articles en accès libre en entier dans ACTU. Il se saisit une seule fois.</p>
     <form id="st-code-form">
@@ -893,6 +930,15 @@ function openSettings() {
       }
     });
     $('#st-regions', body).addEventListener('change', saveRegions);
+    $('#st-translate', body).addEventListener('click', (ev) => {
+      const tog = ev.target.closest('[data-tog]');
+      if (!tog) return;
+      const on = tog.getAttribute('aria-pressed') !== 'true';
+      tog.setAttribute('aria-pressed', String(on));
+      $('em', tog).textContent = on ? 'Activée' : 'Désactivée';
+      store.set('translate', on);
+      state.dirty = true;
+    });
     $('#st-code-form', body).addEventListener('submit', async (ev) => {
       ev.preventDefault();
       const msg = $('#st-code-msg', body);

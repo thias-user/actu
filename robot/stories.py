@@ -10,6 +10,7 @@ import re
 from datetime import timedelta
 
 import context
+import translate
 from common import DATA, STOP, idf_table, log, norm, parallel, read_json, strip_accents, tokens
 from config import FEEDS, YOUTUBE_NEWS
 from fulltext import decrypt, encrypt, key_from
@@ -352,7 +353,7 @@ PLACE_NAMES = {"fr": "France", "us": "États-Unis", "gb": "Royaume-Uni", "de": "
 MONTHS = "janvier février mars avril mai juin juillet août septembre octobre novembre décembre".split()
 
 
-def update(days):
+def update(days, tr=None):
     code = os.environ.get("ACTU_READ_KEY", "").strip()
     if not code:
         log("Schémas « En un coup d'œil » : pas de code de lecture, étape ignorée")
@@ -382,6 +383,11 @@ def update(days):
 
         items = [(reg, a) for reg, arts in ed["regions"].items() for a in arts]
         stories = dict(r for r in parallel(one, items, workers=3) if r)
+        if tr and not tr.broken:  # version française pour l'option « Traduire en français »
+            try:
+                translate.translate_stories(tr, stories, {a["id"]: translate.source_lang(reg, a) for reg, a in items})
+            except Exception as e:
+                log(f"  Traduction des schémas impossible : {type(e).__name__} {str(e)[:80]}")
         old = None
         if spath.exists():
             try:

@@ -4,3 +4,4 @@ __pycache__/
 .claude/
 robot/state/
 code-lecture-actu.txt
+robot/models/

@@ -16,6 +16,7 @@ import research
 import scenes
 import social
 import stories
+import translate
 from common import DATA, PARIS, iso, log, now_paris, read_json, write_json
 from news import day_path
 
@@ -34,7 +35,7 @@ def step(name, fn, *args):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--force", action="store_true", help="mettre à jour même si ce n'est pas l'heure")
-    ap.add_argument("--only", choices=["news", "replays", "arte", "research"], help="une seule partie")
+    ap.add_argument("--only", choices=["news", "traduction", "replays", "arte", "research"], help="une seule partie")
     args = ap.parse_args()
 
     now = now_paris()
@@ -61,7 +62,14 @@ def main():
                 write_json(day_path(d), ed)
         step("réseaux sociaux", social.update, recent)
         step("lecture intégrale", fulltext.update, recent)
-        step("scénarios", stories.update, recent)
+        tr = translate.Translator()
+        step("traduction", translate.update, recent, tr)
+        step("scénarios", stories.update, recent, tr)
+    if args.only == "traduction":  # traduction et schémas seulement (essais)
+        recent = [datetime.fromisoformat(d).date() for d in sorted(p.stem for p in (DATA / "days").glob("*.json"))[-3:]]
+        tr = translate.Translator()
+        step("traduction", translate.update, recent, tr)
+        step("scénarios", stories.update, recent, tr)
     if args.only in (None, "replays"):
         step("replays", replays.update)
     if args.only in (None, "arte"):

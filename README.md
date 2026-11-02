@@ -18,14 +18,25 @@ puis Partager → « Sur l'écran d'accueil ». Adresse : https://thias-user.git
 | **ARTE** | Les reportages en accès libre sur les chaînes YouTube d'ARTE, classés par sujet (géopolitique, histoire, philosophie, art…) et par région du monde. |
 | **Recherche** | Recherche par mots-clés dans les publications scientifiques (OpenAlex, HAL), et une sélection par thème renouvelée tous les 3 mois. |
 
-Dans **Réglages** (roue dentée) : régions affichées, leur ordre et le **nombre d'articles par région (jusqu'à tous)**, centres d'intérêt,
-**thèmes personnalisés**, et le **code de lecture** qui permet de lire les articles en accès libre en entier dans l'application.
+Dans **Réglages** (roue dentée) : régions affichées, leur ordre et le **nombre d'articles par région (jusqu'à tous)**, la **traduction en
+français**, centres d'intérêt, **thèmes personnalisés**, et le **code de lecture** qui permet de lire les articles en accès libre en entier dans l'application.
 
 ## Lecture intégrale
 
 Le site étant public, les textes des journaux n'y sont jamais publiés en clair : le robot récupère chaque matin le texte des articles
 en accès libre (jamais les articles payants, jamais un site qui refuse les robots) et le chiffre (AES-256) avec un code personnel,
 enregistré dans le secret GitHub `ACTU_READ_KEY`. Seule l'application où ce code a été saisi peut les lire.
+
+## Traduction
+
+Option **Traduire en français** dans Réglages (désactivée au départ) : les articles en anglais (Europe, États-Unis) et en espagnol
+(Amérique latine) s'affichent en français : titres, résumés, textes complets et schémas. Dans chaque article, un bouton
+« Voir l'original » / « Traduire en français » change d'avis pour cet article seulement.
+
+Gratuit et sans clé : le robot traduit chaque matin avec les modèles libres d'**Argos Translate** (anglais → français ; espagnol →
+anglais → français), qui tournent sur la machine de GitHub. Les modèles (≈ 350 Mo) restent dans le cache de GitHub ; rien n'est
+stocké sur le téléphone. Les textes complets traduits sont chiffrés avec le code de lecture, comme les originaux. C'est une
+traduction automatique : fiable pour comprendre l'essentiel, moins élégante qu'un traducteur humain.
 
 ## En un coup d'œil
 

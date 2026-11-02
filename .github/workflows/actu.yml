@@ -11,6 +11,10 @@ on:
         description: "Mettre à jour tout de suite"
         type: boolean
         default: true
+      only:
+        description: "Une seule partie (vide = tout ; traduction, replays, arte, research)"
+        type: string
+        default: ""
   push:
     branches: [main]
     paths: ["app/**", "robot/**", ".github/workflows/**"]
@@ -28,7 +32,7 @@ jobs:
   update:
     if: github.event_name != 'push'
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 45
     outputs:
       changed: ${{ steps.save.outputs.changed }}
     steps:
@@ -45,11 +49,18 @@ jobs:
           path: robot/state
           key: actu-state-${{ github.run_id }}
           restore-keys: actu-state-
+      - name: Modèles de traduction gratuits (Argos Translate, téléchargés une fois)
+        uses: actions/cache@v4
+        with:
+          path: robot/models
+          key: argos-1.9-en_fr-es_en
       - name: Collecte des articles, replays, ARTE, recherche
         env:
           OPENALEX_API_KEY: ${{ secrets.OPENALEX_API_KEY }}
           ACTU_READ_KEY: ${{ secrets.ACTU_READ_KEY }}
-        run: python robot/run_daily.py ${{ (github.event_name == 'workflow_dispatch' && inputs.force) && '--force' || '' }}
+          FORCE: ${{ (github.event_name == 'workflow_dispatch' && inputs.force) && '--force' || '' }}
+          ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.only || '' }}
+        run: python robot/run_daily.py $FORCE ${ONLY:+--only "$ONLY"}
       - name: Enregistrement des nouvelles données
         id: save
         run: |
