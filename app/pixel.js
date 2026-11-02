@@ -1003,156 +1003,16 @@ const Pixel = (() => {
     return { draw, s, people };
   }
 
-  /* ------------------------------------------------------------ « En un coup d'œil » : vidéo schématique en 5 étapes */
-  const STEP_FRAMES = 44; // ≈ 5,5 s par étape
-  const STEPS = [['ou', 'OÙ ?'], ['qui', 'QUI ?'], ['quoi', 'QUOI ?'], ['liens', 'LIENS'], ['consequences', 'ET APRÈS ?']];
-  const ACTION_PROP = { vote: 'ballot', victoire: 'trophy', arrete: 'siren', juge: 'gavel', lance: 'rocket', hausse: 'chart', baisse: 'chart', accident: 'fire', annonce: 'podium', signe: 'podium' };
-  const NATURE_COLOR = { allie: '#4ade80', oppose: '#f87171', negocie: '#facc15', depend: '#cbd5e1', aide: '#60a5fa', accuse: '#fb923c' };
-  const CONS_LABEL = { hausse: 'HAUSSE', baisse: 'BAISSE', alerte: 'ALERTE', election: 'VOTE', loi: 'LOI', argent: 'ARGENT', sante: 'SANTE', guerre: 'GUERRE', paix: 'PAIX', justice: 'JUSTICE', climat: 'CLIMAT', emploi: 'EMPLOI', autre: 'A SUIVRE' };
   const COUNTRY_NAME = { fr: 'FRANCE', us: 'USA', gb: 'ROYAUME-UNI', de: 'ALLEMAGNE', ru: 'RUSSIE', ua: 'UKRAINE', cn: 'CHINE', tw: 'TAIWAN', it: 'ITALIE', es: 'ESPAGNE',
     be: 'BELGIQUE', eu: 'UE', br: 'BRESIL', ar: 'ARGENTINE', mx: 'MEXIQUE', jp: 'JAPON', in: 'INDE', il: 'ISRAEL', ps: 'PALESTINE', ir: 'IRAN', sy: 'SYRIE',
     tr: 'TURQUIE', lb: 'LIBAN', co: 'COLOMBIE', ve: 'VENEZUELA', cl: 'CHILI', pe: 'PEROU', cu: 'CUBA', ec: 'EQUATEUR', uy: 'URUGUAY', ca: 'CANADA', pl: 'POLOGNE',
     bg: 'BULGARIE', se: 'SUEDE', nl: 'PAYS-BAS', ie: 'IRLANDE', latam: 'AMERIQUE LATINE', nato: 'OTAN' };
 
-  function blueprint(s, title) {
-    const { p, W, H } = s;
-    p(0, 0, '#0f2240', W, H);
-    for (let x = 0; x < W; x += 8) p(x, 0, '#16305a', 1, H);
-    for (let y = 0; y < H; y += 8) p(0, y, '#16305a', W, 1);
-    p(2, 2, 'rgba(10,20,40,.8)', textWidth(strip(title)) + 4, 8); p.text(strip(title), 4, 3, '#9cc7ff');
-  }
-  function dashLine(p, x0, y0, x1, y1, c, phase) {
-    const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)) | 0;
-    for (let i = 0; i <= n; i++) if (((i + phase) >> 1) % 3 !== 0) p(Math.round(x0 + ((x1 - x0) * i) / n), Math.round(y0 + ((y1 - y0) * i) / n), c);
-    const ang = Math.atan2(y1 - y0, x1 - x0);
-    for (let k = 1; k <= 3; k++) {
-      p(Math.round(x1 - Math.cos(ang - 0.6) * k), Math.round(y1 - Math.sin(ang - 0.6) * k), c);
-      p(Math.round(x1 - Math.cos(ang + 0.6) * k), Math.round(y1 - Math.sin(ang + 0.6) * k), c);
-    }
-  }
-  function pictogram(p, kind, x, y, f) {
-    const blink = f % 10 < 6;
-    switch (kind) {
-      case 'hausse': for (let j = 0; j < 7; j++) p(x + 7 - j, y + j, '#22c55e', j * 2 + 1, 1); p(x + 5, y + 7, '#22c55e', 5, 7); break;
-      case 'baisse': p(x + 5, y, '#ef4444', 5, 7); for (let j = 0; j < 7; j++) p(x + 1 + j, y + 7 + j, '#ef4444', 13 - j * 2, 1); break;
-      case 'alerte': for (let j = 0; j < 12; j++) p(x + 7 - (j >> 1), y + j, '#facc15', (j >> 1) * 2 + 1, 1); if (blink) { p(x + 7, y + 4, '#111', 1, 4); p(x + 7, y + 9, '#111', 1, 1); } break;
-      case 'election': p(x + 1, y + 6, '#e8eef5', 13, 8); p(x + 4, y + 6, '#333', 7, 1); p(x + 5, y + (f % 8), '#fff', 5, 4); break;
-      case 'loi': p(x + 2, y, '#f5e6c4', 11, 14); for (let k = 0; k < 4; k++) p(x + 4, y + 3 + k * 3, '#8b6b3a', 7, 1); p(x + 9, y + 11, '#c0392b', 3, 3); break;
-      case 'argent': for (let k = 0; k < 4; k++) { p(x + 2, y + 12 - k * 2, '#f1c40f', 10, 1); p(x + 2, y + 13 - k * 2, '#c99a06', 10, 1); } if (blink) p(x + 12, y + 1, '#fff', 1, 1); break;
-      case 'sante': p(x + 5, y + 1, '#e53935', 4, 12); p(x + 1, y + 5, '#e53935', 12, 4); break;
-      case 'guerre': for (let k = 0; k < 8; k++) { const a = (k / 8) * Math.PI * 2 + f * 0.1; p(Math.round(x + 7 + Math.cos(a) * 6), Math.round(y + 7 + Math.sin(a) * 6), '#ff8c1a', 2, 2); } disc(p, x + 7, y + 7, 3, '#ffd23f'); break;
-      case 'paix': p(x + 2, y + 6, '#fff', 9, 3); p(x + 10, y + 5, '#fff', 3, 2); p(x + 4, blink ? y + 3 : y + 9, '#fff', 4, 2); p(x + 12, y + 6, '#f59e0b', 2, 1); break;
-      case 'justice': p(x + 7, y + 1, '#d4a017', 1, 12); p(x + 1, y + 3, '#d4a017', 13, 1); p(x, y + 7, '#d4a017', 5, 1); p(x + 10, y + 7, '#d4a017', 5, 1); p(x + 4, y + 13, '#d4a017', 7, 1); break;
-      case 'climat': p(x + 6, y, '#e5e7eb', 3, 11); disc(p, x + 7, y + 12, 2, '#ef4444'); p(x + 7, y + 4 + (blink ? 0 : 2), '#ef4444', 1, 8); break;
-      case 'emploi': p(x + 1, y + 4, '#7a5230', 13, 9); p(x + 5, y + 2, '#3a2a1a', 5, 2); p(x + 1, y + 7, '#5b3a1e', 13, 1); break;
-      default: p(x + 4, y + 1, '#e5e7eb', 6, 2); p(x + 9, y + 3, '#e5e7eb', 2, 3); p(x + 6, y + 6, '#e5e7eb', 3, 3); if (blink) p(x + 6, y + 11, '#e5e7eb', 3, 2);
-    }
-  }
-  function storyPlayer(canvas, story, spec, seedText, onStep) {
-    const steps = STEPS.filter(([k]) => k !== 'liens' || (story.links || []).length);
-    const actors = (story.actors || []).slice(0, 4);
-    let local = 0, cur = -1, sub = null, paused = false;
-    const W = 128;
-    function enter(i) {
-      cur = i;
-      const key = steps[i][0], seed = seedText + ':' + key;
-      const place = story.place || {};
-      if (key === 'ou') {
-        const country = place.country && place.country !== 'monde' ? place.country : spec.country;
-        sub = build(canvas, { bg: country ? 'capital' : 'mountains', country, time: spec.time === 'night' ? 'dusk' : 'sunset', cast: [], flags: country ? [country] : [],
-          label: [place.city || COUNTRY_NAME[country] || 'MONDE'] }, seed, { width: W, ground: 0.8, labelY: 0.08 });
-      } else if (key === 'quoi') {
-        const a = story.action || {}, kind = a.kind || 'annonce';
-        const who = [actors[a.who] || actors[0], actors[a.target]].filter(Boolean);
-        const cast = kind === 'manifeste' ? ['protester', 'protester', 'protester'] : who.map((x) => x.role || 'citizen');
-        sub = build(canvas, { ...spec, sport: kind === 'victoire' ? undefined : spec.sport, cast: cast.length ? cast : spec.cast, tags: kind === 'manifeste' ? [] : who.map((x) => x.tag),
-          prop: ACTION_PROP[kind] || (spec.bg === 'ruins' ? 'tank' : null), dir: kind === 'baisse' ? 'down' : 'up', label: [a.verb || 'ACTION'],
-          flags: who.map((x) => x.country).filter((c) => FLAGS[c]) }, seed, { width: W, ground: 0.8, labelY: 0.08, still: true, facing: ['negocie', 'aide', 'attaque', 'signe'].includes(kind) });
-        sub.kind = kind;
-      } else {
-        const fake = { width: W };
-        canvas.width = W; canvas.height = Math.max(48, Math.round(W * (canvas.clientHeight || 80) / (canvas.clientWidth || 128)));
-        const ctx = canvas.getContext('2d');
-        sub = { s: { ctx, p: painter(ctx), W, H: canvas.height, G: Math.round(canvas.height * 0.72) }, key, opts: fake };
-      }
-      onStep?.(i, key, steps[i][1]);
-    }
-    function drawSchema(f, key) {
-      const { s } = sub, { p, W: w, H } = s;
-      if (key === 'qui') {
-        blueprint(s, 'LES ACTEURS');
-        const n = Math.max(1, actors.length), base = H - 14;
-        p(0, base + 12, '#9cc7ff', w, 1);
-        actors.forEach((a, i) => {
-          const target = Math.round((w * (i + 0.5)) / n) - 3, x = Math.round(Math.min(target, -10 + (f - i * 4) * 3));
-          drawPerson(p, x, base, a.role || 'citizen', { skin: SKIN[i % SKIN.length], hair: HAIR[(i * 2) % HAIR.length], shirt: SHIRT[i % SHIRT.length], phase: i * 2 }, f, x < target, 1);
-          if (x >= target - 1) { nameTag(s, a.tag || a.name, x + 3, base - 10, false); miniFlag(p, a.country, x, base + 14); }
-        });
-      } else if (key === 'liens') {
-        blueprint(s, 'LIENS');
-        const n = actors.length, cx = w / 2, cy = H / 2 + 4, rx = w * 0.34, ry = H * 0.28;
-        const pos = actors.map((a, i) => { const ang = -Math.PI / 2 + (i / Math.max(1, n)) * Math.PI * 2 + (n === 2 ? Math.PI / 2 : 0); return [Math.round(cx + Math.cos(ang) * rx), Math.round(cy + Math.sin(ang) * ry)]; });
-        (story.links || []).forEach((l, k) => {
-          const a = pos[l.from], b = pos[l.to];
-          if (!a || !b || l.from === l.to) return;
-          const c = NATURE_COLOR[l.nature] || '#e5e7eb', dx = b[0] - a[0], dy = b[1] - a[1], len = Math.hypot(dx, dy) || 1, off = 9;
-          dashLine(p, a[0] + (dx / len) * off, a[1] + (dy / len) * off, b[0] - (dx / len) * off, b[1] - (dy / len) * off, c, f + k * 3);
-          const label = strip(l.rel).slice(0, 10), tw = textWidth(label), mx = Math.round((a[0] + b[0]) / 2 - tw / 2), my = Math.round((a[1] + b[1]) / 2 - 3 + (k % 2 ? 6 : -6));
-          p(mx - 2, my - 1, 'rgba(10,20,40,.9)', tw + 4, 7); p.text(label, mx, my, c);
-        });
-        actors.forEach((a, i) => {
-          const [x, y] = pos[i];
-          drawPerson(p, x - 3, y - 6, a.role || 'citizen', { skin: SKIN[i % SKIN.length], hair: HAIR[(i * 2) % HAIR.length], shirt: SHIRT[i % SHIRT.length], phase: i }, f, false, 1);
-          nameTag(s, a.tag || a.name, x, y + 8, false);
-        });
-      } else if (key === 'consequences') {
-        blueprint(s, 'ET APRES ?');
-        const list = (story.consequences || []).slice(0, 3), n = Math.max(1, list.length);
-        list.forEach((c, i) => {
-          if (f < i * 10) return;
-          const x = Math.round((w * (i + 0.5)) / n) - 7, y = Math.round(H * 0.32);
-          pictogram(p, c.kind, x, y, f);
-          const t = CONS_LABEL[c.kind] || CONS_LABEL.autre, tw = textWidth(t);
-          p.text(t, x + 7 - Math.round(tw / 2), y + 20, '#e5e7eb');
-        });
-      }
-    }
-    function drawAction(f) {
-      const { s, people, kind } = sub, { p, G } = s;
-      const a = people[0], b = people[1];
-      if (!a) return;
-      const ax = a.cx, bx = b ? b.cx : ax + 30;
-      if (kind === 'attaque') { for (let k = 0; k < 3; k++) { const t = ((f + k * 5) % 15) / 15; p(Math.round(ax + (bx - ax) * t), Math.round(G - 14 - Math.sin(t * Math.PI) * 10), '#ffb347', 2, 1); } if (f % 15 > 12) disc(p, bx, G - 8, 4, '#ff8c1a'); }
-      else if (kind === 'negocie' || kind === 'autre') { const who = (f >> 3) % 2 && b ? bx : ax; p(who - 5, G - 34, '#fff', 11, 7); p(who - 1, G - 27, '#fff', 2, 2); for (let k = 0; k < 3; k++) if ((f >> 1) % 4 > k) p(who - 3 + k * 3, G - 31, '#333', 1, 1); }
-      else if (kind === 'annonce' || kind === 'avertit') { if (f % 12 < 8) { p(ax - 4, G - 34, kind === 'avertit' ? '#facc15' : '#fff', 9, 8); p(ax, G - 32, '#e53935', 1, 4); p(ax, G - 27, '#e53935', 1, 1); } }
-      else if (kind === 'victoire') { for (let k = 0; k < 14; k++) p((k * 11 + f * 2) % s.W, (k * 7 + f * 3) % (G - 4), SHIRT[k % SHIRT.length]); }
-      else if (kind === 'defaite') { p(ax - 6, G - 34, '#6b7280', 13, 5); for (let k = 0; k < 4; k++) p(ax - 5 + k * 3, G - 28 + ((f + k * 2) % 8), '#93c5fd', 1, 2); }
-      else if (kind === 'aide') { const t = (f % 16) / 16, x = Math.round(ax + (bx - ax) * t); p(x - 2, G - 22, '#ef4444', 2, 2); p(x + 1, G - 22, '#ef4444', 2, 2); p(x - 1, G - 21, '#ef4444', 3, 2); }
-      else if (kind === 'decouvre') { if (f % 8 < 5) { disc(p, ax, G - 30, 3, '#fde047'); p(ax - 1, G - 26, '#9ca3af', 3, 2); } }
-    }
-    return {
-      steps,
-      draw(f) {
-        if (cur < 0) enter(0);
-        const step = (local / STEP_FRAMES) | 0;
-        if (step !== cur) enter(step % steps.length);
-        if (step >= steps.length) local = 0;
-        const lf = local % STEP_FRAMES;
-        if (sub.draw) { sub.draw(lf); if (steps[cur][0] === 'quoi') drawAction(lf); }
-        else drawSchema(lf, sub.key);
-        if (!paused) local++;
-      },
-      go(i) { local = ((i + steps.length) % steps.length) * STEP_FRAMES; },
-      current: () => ((local / STEP_FRAMES) | 0) % steps.length, // position réelle, même entre deux images
-      toggle() { paused = !paused; return paused; },
-    };
-  }
-
   /* ------------------------------------------------------------ boucle : seule la scène la plus visible s'anime */
-  const scenes = new Map(); // canvas → { spec, seed, opts, scene, ratio, story }
+  const scenes = new Map(); // canvas → { spec, seed, opts, scene, ratio }
   let frame = 0, timer = null;
   function make(canvas, item) {
-    return item.story ? storyPlayer(canvas, item.story, item.spec, item.seed, item.opts.onStep) : build(canvas, item.spec, item.seed, item.opts);
+    return build(canvas, item.spec, item.seed, item.opts);
   }
   const io = 'IntersectionObserver' in window ? new IntersectionObserver((entries) => {
     for (const e of entries) {
@@ -1175,7 +1035,7 @@ const Pixel = (() => {
     let best = null, bestCanvas = null;
     for (const [canvas, item] of scenes) {
       if (!canvas.isConnected) { scenes.delete(canvas); io?.unobserve(canvas); continue; }
-      const score = item.ratio > 0.2 ? item.ratio + (item.story ? 10 : 0) : 0;
+      const score = item.ratio > 0.2 ? item.ratio : 0;
       if (score && (!best || score > best.score)) { best = item; best.score = score; bestCanvas = canvas; }
     }
     if (best) { if (!best.scene) best.scene = make(bestCanvas, best); best.scene.draw(frame); }
@@ -1186,7 +1046,7 @@ const Pixel = (() => {
   let resizeTimer;
   window.addEventListener('resize', () => {
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => { for (const [canvas, item] of scenes) if (!item.story) { item.scene = null; if (item.ratio > 0) { item.scene = make(canvas, item); item.scene.draw(frame); } } }, 250);
+    resizeTimer = setTimeout(() => { for (const [canvas, item] of scenes) { item.scene = null; if (item.ratio > 0) { item.scene = make(canvas, item); item.scene.draw(frame); } } }, 250);
   });
 
   function mount(canvas, spec, seed, opts = {}) {
@@ -1195,20 +1055,6 @@ const Pixel = (() => {
     if (io) io.observe(canvas);
     else { const sc = build(canvas, spec, seed, opts); scenes.get(canvas).scene = sc; scenes.get(canvas).ratio = 1; sc.draw(0); tick(); }
   }
-  /** Vidéo « En un coup d'œil » ; renvoie des commandes (précédent, suivant, pause). */
-  function mountStory(canvas, story, spec, seed, onStep) {
-    const item = { spec, seed, opts: { onStep }, story, scene: null, ratio: 0 };
-    scenes.set(canvas, item);
-    if (io) io.observe(canvas);
-    const ensure = () => (item.scene ||= make(canvas, item));
-    return {
-      next() { const sc = ensure(); sc.go(sc.current() + 1); },
-      prev() { const sc = ensure(); sc.go(sc.current() - 1); },
-      toggle() { return ensure().toggle(); },
-      steps: () => ensure().steps,
-    };
-  }
-
   /* scène de secours pour les éditions préparées avant l'arrivée des scènes */
   const FROM_THEME = {
     geopolitique: { bg: 'ruins', cast: ['soldier', 'soldier'], prop: 'tank', label: ['MONDE'] },
@@ -1228,5 +1074,5 @@ const Pixel = (() => {
     return { ...(FROM_THEME[t] || { bg: 'city', cast: ['journalist', 'citizen'], prop: 'mic', label: ['INFO'] }), flags: [] };
   }
 
-  return { mount, mountStory, fallback, countryName: (c) => COUNTRY_NAME[c] };
+  return { mount, fallback, countryName: (c) => COUNTRY_NAME[c] };
 })();

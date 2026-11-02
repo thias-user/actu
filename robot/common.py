@@ -19,7 +19,7 @@ APP = ROOT / "app"
 DATA = APP / "data"
 STATE = ROOT / "robot" / "state"
 PARIS = ZoneInfo("Europe/Paris")
-UA = "ACTU-bot/1.0 (lecteur d'actualites personnel; RSS)"
+UA = "ACTU-bot/1.0 (+https://github.com/thias-user/actu; lecteur d'actualites personnel)"
 
 
 def log(*args):

@@ -1,7 +1,7 @@
 /* ACTU — application web installable. Aucune donnée n'est stockée sur le téléphone hormis vos réglages. */
 'use strict';
 
-const VERSION = '1.2.0';
+const VERSION = '1.3.0';
 const DATA = 'data/';
 const REGIONS = {
   fr: { label: 'France', flag: '🇫🇷', color: 'var(--fr)', ink: '#fff' },
@@ -124,7 +124,15 @@ function themeById(id) { return allThemes().find((t) => t.id === id); }
 function interests() { return new Set(store.get('interests', state.themes.map((t) => t.id)).concat(customThemes().map((t) => t.id))); }
 /** Régions du fil, dans l'ordre choisi : [{ id, on, n }] (n = nombre d'articles, ALL = tous). */
 function regionPrefs() {
-  const saved = store.get('regions', []);
+  let saved = store.get('regions', []);
+  if (!Array.isArray(saved)) saved = [];
+  // version 1.3 : les boutons des régions ne montraient pas s'ils étaient activés, des régions ont pu être masquées
+  // sans le voir (France, Europe…) ; on les réaffiche toutes une fois
+  if (store.get('regionsV', 1) < 2) {
+    saved = saved.map((r) => ({ ...r, on: true }));
+    store.set('regions', saved);
+    store.set('regionsV', 2);
+  }
   const list = saved.filter((r) => REGIONS[r.id]);
   for (const id of ORDER) if (!list.some((r) => r.id === id)) list.push({ id, on: true, n: PER_REGION });
   return list;
@@ -221,6 +229,7 @@ async function loadNextDay() {
 }
 
 function renderDay(day, isFirst) {
+  const hidden = regionPrefs().filter((r) => !r.on);
   const regions = regionPrefs().filter((r) => r.on).map((r) => [r.id, pick(day.regions[r.id] || [], r.n)]).filter(([, l]) => l.length);
   const frag = document.createDocumentFragment();
   const intro = document.createElement('section');
@@ -231,6 +240,7 @@ function renderDay(day, isFirst) {
     <h2>${isFirst && day.date === todayISO() ? 'L’essentiel du jour' : `L’édition ${day.date === addDays(todayISO(), -1) ? 'd’hier' : 'du ' + esc(fmtShort.format(new Date(day.date + 'T12:00:00')))}`}</h2>
     <p class="sub">${isFirst && updated ? `Mise à jour ${updated.toDateString() === new Date().toDateString() ? 'aujourd’hui' : 'le ' + esc(fmtShort.format(updated))} à ${esc(fmtTime.format(updated))} · prochaine demain à 10h` : 'Suite de votre fil : les articles de la veille.'}</p>
     <ol>${regions.map(([r, l]) => `<li style="--rc:${REGIONS[r].color}"><span class="sw"></span>${REGIONS[r].flag} ${REGIONS[r].label}<small>${l.length} article${l.length > 1 ? 's' : ''}</small></li>`).join('') || '<li>Aucune région choisie : voir Réglages</li>'}</ol>
+    ${isFirst && hidden.length ? `<div class="hidden-regions">Masquée${hidden.length > 1 ? 's' : ''} : ${hidden.map((r) => REGIONS[r.id].flag + ' ' + REGIONS[r.id].label).join(', ')}<button class="btn" data-action="show-regions">Afficher</button></div>` : ''}
     <div class="hint"><svg viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></svg>Glissez vers le haut</div>`;
   frag.append(intro);
   for (const [r, list] of regions) {
@@ -317,16 +327,8 @@ function openArticle(a, region, date) {
       ${unavailable}
       ${a.also?.length ? `<p class="small">Sujet aussi traité par : ${a.also.map(esc).join(', ')}.</p>` : ''}
       <h3 class="section-title">En un coup d’œil</h3>
-      <div class="story">
-        <div class="story-bars"></div>
-        <canvas class="scene-box" aria-label="Vidéo schématique résumant l’article"></canvas>
-        <div class="story-cap"><b class="story-step">OÙ ?</b><p class="story-text"></p></div>
-        <div class="story-nav">
-          <button class="icon-btn" data-sprev aria-label="Étape précédente"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
-          <button class="icon-btn" data-spause aria-label="Pause"><svg viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></svg></button>
-          <button class="icon-btn" data-snext aria-label="Étape suivante"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>
-        </div>
-      </div>
+      <div class="mm-box"></div>
+      <p class="small">Schéma fait automatiquement à partir de l’article${reader.code() ? '' : ' (version courte : saisissez votre code de lecture dans Réglages pour la version complète)'}, complété par Wikipédia et les éditions précédentes d’ACTU.</p>
       <h3 class="section-title">Sur les réseaux</h3>
       ${a.posts?.length ? `<div class="posts">${a.posts.map(postHTML).join('')}</div>`
         : '<p class="small">Aucune publication pertinente des chaînes d’information et créateurs suivis (HugoDécrypte, Ulyces, franceinfo, Le Monde, AFP…) pour l’instant. ACTU vérifie à nouveau chaque matin.</p>'}
@@ -334,7 +336,7 @@ function openArticle(a, region, date) {
     $('[data-share]', body).addEventListener('click', () => share(a.title, a.url));
     bindPosts(body);
     if (a.full) showFullText(a, date, $('#fulltext', body));
-    playStory(a, region, date, $('.story', body));
+    playStory(a, region, date, $('.mm-box', body));
   });
 }
 
@@ -389,30 +391,27 @@ const GROUP = { politician: 'Gouvernement', citizen: 'Habitants', police: 'Polic
   racer: 'Pilotes', soldier: 'Armée', business: 'Entreprises', worker: 'Salariés', protester: 'Manifestants', student: 'Élèves', teacher: 'Enseignants',
   judge: 'Justice', scientist: 'Chercheurs', artist: 'Artistes', musician: 'Musiciens', model: 'Mannequins', hacker: 'Pirates', farmer: 'Agriculteurs',
   astronaut: 'Astronautes', priest: 'Église', journalist: 'Journalistes' };
-const tagOf = (name) => String(name).normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().split(/\s+/).pop().replace(/[^A-Z0-9-]/g, '').slice(0, 10);
-/** Scénario simplifié tiré du titre et du résumé (quand le code de lecture n'est pas saisi). */
+/** Schéma court tiré du titre et du résumé (quand le code de lecture n'est pas saisi). */
 function storyFrom(a, region, date) {
   const sc = a.scene || Pixel.fallback(a);
   const country = sc.country || { fr: 'fr', us: 'us', eu: 'eu' }[region] || 'latam';
-  const names = [...new Set((a.title + ' ' + a.summary).match(/\b[A-ZÉÈÀÂÎÔÛÇ][a-zà-ÿ'’-]+(?:\s+[A-ZÉÈÀÂÎÔÛÇ][a-zà-ÿ'’-]+)+/g) || [])].slice(0, 2);
+  const names = [...new Set((a.title + ' ' + a.summary).match(/\b[A-ZÉÈÀÂÎÔÛÇ][a-zà-ÿ'’-]+(?:\s+[A-ZÉÈÀÂÎÔÛÇ][a-zà-ÿ'’-]+)+/g) || [])].slice(0, 3);
   const cast = (sc.cast || ['citizen']).slice(0, 2);
-  const actors = cast.map((role, i) => ({ name: names[i] || GROUP[role] || 'Habitants', tag: tagOf(names[i] || GROUP[role] || 'Habitants'), role, country: (sc.flags || [])[i] || country }));
+  const actors = names.length ? names.map((name) => ({ name, role: cast[0], country, kind: 'nom' }))
+    : [...new Set(cast)].map((role) => ({ name: GROUP[role] || 'Habitants', role, country, group: true }));
   const kind = sc.dir === 'down' ? 'baisse' : TOPIC_ACTION[sc.topic] || 'annonce';
   const sentences = (a.summary || '').split(/(?<=[.!?])\s+/).filter((x) => x.length > 20);
   const place = sc.city ? cap(sc.city.toLowerCase()) : (Pixel.countryName(country) ? cap(Pixel.countryName(country).toLowerCase()) : 'Dans le monde');
   return {
-    place: { country, city: sc.city || '' },
+    place: { country, city: sc.city || '', label: place, date: cap(fmtLong.format(new Date(date + 'T12:00:00'))) },
     actors,
-    action: { who: 0, verb: ACTION_VERB[kind] || 'ACTU', kind, target: actors.length > 1 ? 1 : -1 },
-    links: actors.length > 1 ? [{ from: 0, to: 1, rel: 'LIEN', nature: kind === 'attaque' ? 'oppose' : kind === 'negocie' ? 'negocie' : 'depend' }] : [],
-    consequences: [{ text: sentences[1] || `À suivre : ${a.source}${a.also?.length ? ', ' + a.also.slice(0, 2).join(', ') : ''} couvrent le sujet.`, kind: 'autre' }],
-    captions: {
-      ou: `${place} · ${cap(fmtLong.format(new Date(date + 'T12:00:00')))}`,
-      qui: 'En jeu : ' + actors.map((x) => x.name).join(', ') + '.',
-      quoi: a.title,
-      liens: sentences[0] || (a.also?.length ? `Sujet aussi traité par ${a.also.slice(0, 3).join(', ')}.` : a.source),
-      consequences: sentences[1] || `À suivre : ${a.source}${a.also?.length ? ', ' + a.also.slice(0, 2).join(', ') : ''} couvrent le sujet.`,
-    },
+    action: { who: 0, verb: ACTION_VERB[kind] || 'ANNONCE', kind, target: -1 },
+    links: [],
+    consequences: [{ text: sentences[1] || `À suivre dans ${a.source}${a.also?.length ? ', ' + a.also.slice(0, 2).join(', ') : ''}.`, kind: 'autre' }],
+    captions: { quoi: sentences[0] || a.summary || a.title },
+    context: null,
+    related: [],
+    sources: [a.source, ...(a.also || [])],
   };
 }
 async function playStory(a, region, date, box) {
@@ -420,21 +419,15 @@ async function playStory(a, region, date, box) {
   if (reader.code()) { try { story = (await reader.stories(date))[a.id] || null; } catch { story = null; } }
   story = story || storyFrom(a, region, date);
   if (!box.isConnected) return;
-  const bars = $('.story-bars', box), step = $('.story-step', box), text = $('.story-text', box);
-  const ctl = Pixel.mountStory($('canvas', box), story, a.scene || Pixel.fallback(a), a.id + ':story', (i, key, label) => {
-    const n = ctl ? ctl.steps().length : 5;
-    bars.innerHTML = Array.from({ length: n }, (_, k) => `<i class="${k < i ? 'done' : k === i ? 'on' : ''}"></i>`).join('');
-    step.textContent = label;
-    text.textContent = story.captions?.[key] || '';
-  });
-  $('[data-snext]', box).addEventListener('click', () => ctl.next());
-  $('[data-sprev]', box).addEventListener('click', () => ctl.prev());
-  $('canvas', box).addEventListener('click', (ev) => (ev.offsetX < ev.currentTarget.clientWidth / 3 ? ctl.prev() : ctl.next()));
-  $('[data-spause]', box).addEventListener('click', (ev) => {
-    const paused = ctl.toggle();
-    box.classList.toggle('paused', paused);
-    ev.currentTarget.innerHTML = paused ? '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>' : '<svg viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></svg>';
-  });
+  MindMap.mount(box, story, { color: REGIONS[region].color, onRelated: openRelated });
+}
+/** Un article lié (jours précédents) touché dans le schéma : on l'ouvre. */
+async function openRelated(rel) {
+  try {
+    const day = await loadDay(rel.d);
+    const a = (day.regions[rel.r] || []).find((x) => x.id === rel.id);
+    if (a) openArticle(a, rel.r, rel.d); else toast('Cet article n’est plus disponible');
+  } catch { toast('Hors connexion'); }
 }
 
 async function showFullText(a, date, box) {
@@ -702,48 +695,7 @@ function openVideo(v) {
     </div>`);
 }
 
-/* ---------------------------------------------------------------- 5. TikTok des grands médias */
-// Comptes officiels vérifiés (outil d'intégration public de TikTok). Le module de TikTok montre leurs dernières vidéos.
-const TIKTOK = [
-  ['France', [['lemondefr', 'Le Monde'], ['franceinfo', 'franceinfo'], ['france24', 'France 24'], ['afpfr', 'AFP'], ['hugodecrypte', 'HugoDécrypte'],
-    ['lefigaro', 'Le Figaro'], ['leparisien', 'Le Parisien'], ['tf1info', 'TF1 INFO'], ['bfmtv', 'BFMTV'], ['rfi', 'RFI'], ['franceinter', 'France Inter'],
-    ['ouestfrance', 'Ouest-France'], ['konbini', 'Konbini']]],
-  ['Monde', [['afp', 'AFP News'], ['reuters', 'Reuters'], ['apnews', 'AP'], ['bbcnews', 'BBC News'], ['guardian', 'The Guardian'], ['dwnews', 'DW News'],
-    ['aljazeeraenglish', 'Al Jazeera'], ['skynews', 'Sky News']]],
-  ['États-Unis', [['nytimes', 'New York Times'], ['washingtonpost', 'Washington Post'], ['cnn', 'CNN'], ['nbcnews', 'NBC News'], ['abcnews', 'ABC News'], ['cbsnews', 'CBS News']]],
-  ['Espagnol', [['elpais', 'El País'], ['infobae', 'Infobae'], ['clarincom', 'Clarín'], ['lanacioncom', 'La Nación'], ['cnnee', 'CNN en Español'], ['dw_espanol', 'DW Español']]],
-];
-function initTiktok() {
-  const box = $('#tt-accounts');
-  box.innerHTML = TIKTOK.map(([group, list]) => `<div class="tt-group"><span>${esc(group)}</span><div class="chips scroll-x">${list.map(([h, name]) =>
-    `<button class="chip" data-h="${esc(h)}" aria-pressed="false">${esc(name)}</button>`).join('')}</div></div>`).join('');
-  box.addEventListener('click', (ev) => {
-    const b = ev.target.closest('[data-h]');
-    if (!b) return;
-    $$('[data-h]', box).forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
-    store.set('tiktok', b.dataset.h);
-    renderTiktok(b.dataset.h, b.textContent);
-  });
-  const last = store.get('tiktok', 'lemondefr');
-  ($(`[data-h="${CSS.escape(last)}"]`, box) || $('[data-h]', box)).click();
-}
-function renderTiktok(handle, name) {
-  const h = encodeURIComponent(handle);
-  $('#tt-embed').innerHTML = `
-    <blockquote class="tiktok-embed" cite="https://www.tiktok.com/@${h}" data-unique-id="${esc(handle)}" data-embed-type="creator" style="max-width:780px;min-width:288px;">
-      <section><a target="_blank" rel="noopener" href="https://www.tiktok.com/@${h}?refer=creator_embed">@${esc(handle)}</a></section>
-    </blockquote>
-    <a class="btn" style="margin-top:12px;width:100%" href="https://www.tiktok.com/@${h}" target="_blank" rel="noopener">Ouvrir ${esc(name)} dans TikTok<svg viewBox="0 0 24 24"><use href="#i-ext"/></svg></a>`;
-  // le module de TikTok ne lit que les blocs présents à son chargement : on le recharge pour chaque compte
-  $('#tiktok-js')?.remove();
-  const sc = document.createElement('script');
-  sc.id = 'tiktok-js';
-  sc.async = true;
-  sc.src = 'https://www.tiktok.com/embed.js';
-  document.body.append(sc);
-}
-
-/* ---------------------------------------------------------------- 6. Recherche */
+/* ---------------------------------------------------------------- 5. Recherche */
 const rs = { curated: null, theme: '' };
 const OA_SELECT = 'id,display_name,publication_year,authorships,primary_location,cited_by_count,doi,open_access,language,abstract_inverted_index';
 
@@ -880,8 +832,8 @@ function openSettings() {
     <h2>Réglages</h2>
     <h3>Mes régions</h3>
     <p class="small">Choisissez les régions du fil « À la une », leur ordre et le nombre d’articles par jour.</p>
-    <div id="st-regions">${regionPrefs().map((r, i, all) => `<div class="reg-row" data-id="${r.id}">
-      <button class="chip" data-tog aria-pressed="${r.on}">${REGIONS[r.id].flag} ${REGIONS[r.id].label}</button>
+    <div id="st-regions">${regionPrefs().map((r, i, all) => `<div class="reg-row${r.on ? '' : ' off'}" data-id="${r.id}">
+      <button class="chip" data-tog aria-pressed="${r.on}"><span class="nm">${REGIONS[r.id].flag} ${REGIONS[r.id].label}</span><em>${r.on ? 'Affichée' : 'Masquée'}</em></button>
       <select data-n aria-label="Nombre d’articles">${[1, 2, 3, 5, 10, 20, ALL].map((n) => `<option value="${n}"${n === r.n ? ' selected' : ''}>${n === ALL ? 'Tous' : n}</option>`).join('')}</select>
       <button class="icon-btn" data-move="-1" aria-label="Monter"${i === 0 ? ' disabled' : ''}>↑</button>
       <button class="icon-btn" data-move="1" aria-label="Descendre"${i === all.length - 1 ? ' disabled' : ''}>↓</button>
@@ -922,7 +874,13 @@ function openSettings() {
     };
     $('#st-regions', body).addEventListener('click', (ev) => {
       const tog = ev.target.closest('[data-tog]');
-      if (tog) { tog.setAttribute('aria-pressed', String(tog.getAttribute('aria-pressed') !== 'true')); saveRegions(); }
+      if (tog) {
+        const on = tog.getAttribute('aria-pressed') !== 'true';
+        tog.setAttribute('aria-pressed', String(on));
+        $('em', tog).textContent = on ? 'Affichée' : 'Masquée';
+        tog.closest('.reg-row').classList.toggle('off', !on);
+        saveRegions();
+      }
       const mv = ev.target.closest('[data-move]');
       if (mv) {
         const row = mv.closest('.reg-row');
@@ -994,7 +952,7 @@ function* allLoadedArticles() {
 }
 
 /* ---------------------------------------------------------------- onglets */
-const INIT = { explore: initExplore, replay: initReplay, arte: initArte, tiktok: initTiktok, research: initResearch };
+const INIT = { explore: initExplore, replay: initReplay, arte: initArte, research: initResearch };
 function showTab(name) {
   document.body.classList.toggle('on-feed', name === 'feed');
   $$('.view').forEach((v) => v.classList.toggle('active', v.id === 'view-' + name));
@@ -1020,6 +978,7 @@ async function boot() {
     if (act === 'close') closeSheet();
     else if (act === 'settings') openSettings();
     else if (act === 'reload') location.reload();
+    else if (act === 'show-regions') { store.set('regions', regionPrefs().map((r) => ({ ...r, on: true }))); initFeed(); }
     else if (act === 'hide-install') { $('#install').hidden = true; store.set('installHidden', true); }
     const tab = ev.target.closest('[data-tab]')?.dataset.tab;
     if (tab) {
@@ -1027,7 +986,10 @@ async function boot() {
       showTab(tab);
     }
   });
-  window.addEventListener('popstate', () => { if (sheet.open) { closeSheet(true); applySettings(); } });
+  window.addEventListener('popstate', () => {
+    if (MindMap.exitFullscreen()) return;  // retour : on quitte d'abord le plein écran du schéma
+    if (sheet.open) { closeSheet(true); applySettings(); }
+  });
   document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') closeSheet(); });
   sheet.el.addEventListener('transitionend', () => { if (!sheet.open) applySettings(); });
   document.addEventListener('visibilitychange', () => {

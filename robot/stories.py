@@ -1,21 +1,23 @@
-"""Scénario de la vidéo « En un coup d'œil » de chaque article : où, qui, quoi, liens, conséquences.
+"""Schéma « En un coup d'œil » de chaque article : où, qui, quoi, liens, pour comprendre, et après.
 
 Entièrement gratuit (aucune intelligence artificielle payante) : on repère dans le texte les acteurs les plus cités,
-le type d'action, les acteurs cités ensemble et les phrases qui annoncent une suite. Les sous-titres reprennent
-des phrases de l'article : comme les textes complets, ces scénarios sont chiffrés avec votre code de lecture
-→ app/data/stories/AAAA-MM-JJ.bin
+le type d'action, les acteurs cités ensemble et les phrases qui annoncent une suite ; context.py ajoute les fiches
+Wikipédia et les articles liés des jours précédents. Les textes du schéma reprennent des phrases de l'article :
+comme les textes complets, ces schémas sont chiffrés avec votre code de lecture → app/data/stories/AAAA-MM-JJ.bin
 """
 import os
 import re
+from datetime import timedelta
 
-from common import DATA, STOP, idf_table, log, norm, read_json, strip_accents, tokens
+import context
+from common import DATA, STOP, idf_table, log, norm, parallel, read_json, strip_accents, tokens
 from config import FEEDS, YOUTUBE_NEWS
 from fulltext import decrypt, encrypt, key_from
 from news import day_path
 from scenes import FLAG_NAMES, FLAGS
 
 SENT_RE = re.compile(r"(?<=[.!?»”])\s+(?=[«“\"A-ZÀ-ÖØ-Þ¿¡])")
-NAME_RE = re.compile(r"\b([A-ZÀ-ÖØ-Þ][\wÀ-ÿ'’\-]+(?:\s+(?:de\s+|da\s+|del\s+|von\s+|van\s+|al-)?[A-ZÀ-ÖØ-Þ][\wÀ-ÿ'’\-]+){0,3})")
+NAME_RE = re.compile(r"\b([A-ZÀ-ÖØ-Þ][\wÀ-ÿ'’\-]+(?:\s+(?:de\s+la\s+|de\s+|da\s+|del\s+|du\s+|des\s+|of\s+the\s+|of\s+|von\s+|van\s+|al-)?[A-ZÀ-ÖØ-Þ][\wÀ-ÿ'’\-]+){0,3})")
 ACRO_RE = re.compile(r"\b([A-Z]{2,6})\b")
 NOT_NAMES = set("""le la les un une des du de en et ou mais il elle ils elles on nous vous ce cette ces son sa ses leur au aux selon pour par
 avec dans sur sous après avant depuis lundi mardi mercredi jeudi vendredi samedi dimanche janvier février mars avril mai juin juillet août
@@ -144,7 +146,8 @@ TITLES = set("""senator sen rep representative gov governor president presidente
 roi rey reine queen pope pape general chancellor chancelier republican republicans democrat democratic democrats republicain democrate
 mayor maire alcalde judge juge juez m mme mr mrs ms dr dra sir lord le la el the former ancien ex leader chef jefe belgian french american
 british german spanish italian russian ukrainian chinese mexican argentine brazilian chilean colombian venezuelan peruvian bulgarian polish
-sr sra don dona pm ceo pdg""".split())
+sr sra don dona pm ceo pdg strategist analyst commentator host anchor spokesman spokeswoman spokesperson secretary attorney ambassador
+envoy coach rapper singer star candidate candidat candidata dirigeant dirigente""".split())
 PLACE_PREP = re.compile(r"\b(à|a|au|aux|en|dans|près de|pres de|in|at|near|from|de|desde|del|en el|en la)\s*$", re.I)
 ELISION = re.compile(r"^[CDJLMNSTQcdjlmnstq][u]?['’]")
 
@@ -221,12 +224,12 @@ def find_actors(title, sents, region_country, title_case=False):
         if any(x["tag"] == tag_of(name) for x in actors):
             continue
         if kind == "pays":
-            actors.append({"name": name, "tag": FLAG_NAMES.get(val, tag_of(name))[:10], "role": "politician", "country": val})
+            actors.append({"name": name, "tag": FLAG_NAMES.get(val, tag_of(name))[:10], "role": "politician", "country": val, "kind": kind})
         elif kind == "org":
             actors.append({"name": name, "tag": name[:10], "role": "politician", "country": "eu" if name in ("UE", "EU", "BCE", "ECB") else
-                           "nato" if name in ("OTAN", "NATO") else region_country})
+                           "nato" if name in ("OTAN", "NATO") else region_country, "kind": kind})
         else:
-            actors.append({"name": name, "tag": tag_of(name), "role": None, "country": region_country})
+            actors.append({"name": name, "tag": tag_of(name), "role": None, "country": region_country, "kind": kind})
         if len(actors) == 4:
             break
     return actors
@@ -285,10 +288,9 @@ def central(sents, title, k=3):
     return [sents[i] for i in top]
 
 
-def make_story(a, region, text, date_label):
+def make_story(a, region, sents, date_label):
     scene = a.get("scene") or {}
     country = scene.get("country") or {"fr": "fr", "us": "us", "eu": "eu"}.get(region, "latam")
-    sents = sentences(text) or sentences(a["summary"]) or [a["title"]]
     actors = find_actors(a["title"], sents[:60], country, title_case=region in ("eu", "us"))
     cast = scene.get("cast") or ["citizen"]
     for i, act in enumerate(actors):
@@ -297,8 +299,8 @@ def make_story(a, region, text, date_label):
         if scene.get("topic") == "guerre" and act["country"] not in ("eu", "nato") and FLAGS.get(norm(act["name"]).strip()):
             act["role"] = "soldier"
     if not actors:  # aucun nom fiable : les groupes de la scène (« Police », « Secours »…)
-        actors = [{"name": GROUP_NAME.get(c, "Habitants"), "tag": tag_of(GROUP_NAME.get(c, "Habitants")), "role": c, "country": country}
-                  for c in dict.fromkeys(cast)][:2]
+        actors = [{"name": GROUP_NAME.get(c, "Habitants"), "tag": tag_of(GROUP_NAME.get(c, "Habitants")), "role": c, "country": country,
+                   "group": True} for c in dict.fromkeys(cast)][:2]
     kind = best_kind(" ".join(sents[:2]) or a["summary"], ACTION_RX, "annonce", a["title"])
     nt = norm(a["title"])
     order = sorted(range(len(actors)), key=lambda i: nt.find(" " + norm(actors[i]["name"]).strip().split()[-1] + " ") % 10000)
@@ -322,7 +324,7 @@ def make_story(a, region, text, date_label):
     if not cons and len(sents) >= 5:
         cons = central(sents[len(sents) // 2:], a["title"], 1)
     consequences = [{"text": shorten(s, 160), "kind": best_kind(s, CONS_RX, "autre")} for s in cons] or \
-                   [{"text": f"À suivre : {a['source']}" + (f", {', '.join(a.get('also', [])[:2])}" if a.get("also") else "") + " couvrent le sujet.", "kind": "autre"}]
+                   [{"text": "Aucune suite annoncée dans l’article pour l’instant.", "kind": "autre"}]
     key = central(sents, a["title"], 2)
     city = (scene.get("city") or "").title()
     pname = PLACE_NAMES.get(country, "")
@@ -335,7 +337,7 @@ def make_story(a, region, text, date_label):
         "consequences": " ".join(c["text"] for c in consequences),
     }
     return {
-        "place": {"country": country, "city": scene.get("city", "")},
+        "place": {"country": country, "city": scene.get("city", ""), "label": place, "date": date_label},
         "actors": actors,
         "action": {"who": who, "verb": VERB_LABEL.get(kind, "ACTU"), "kind": kind, "target": target},
         "links": links, "consequences": consequences, "captions": captions,
@@ -353,21 +355,33 @@ MONTHS = "janvier février mars avril mai juin juillet août septembre octobre n
 def update(days):
     code = os.environ.get("ACTU_READ_KEY", "").strip()
     if not code:
-        log("Scénarios « En un coup d'œil » : pas de code de lecture, étape ignorée")
+        log("Schémas « En un coup d'œil » : pas de code de lecture, étape ignorée")
         return
     key = key_from(code)
+    wiki = context.Wiki()
     total = 0
     for d in days:
         ed = read_json(day_path(d))
         if not ed:
             continue
+        # articles des deux semaines précédentes et des jours suivants : chaque article est relié au reste de son histoire
+        editions = [(x, e) for x in (d + timedelta(days=k) for k in range(-context.RELATED_DAYS, 4)) if (e := read_json(day_path(x)))]
+        pool, idf = context.build_pool(editions)
         tpath, spath = DATA / "texts" / f"{d.isoformat()}.bin", DATA / "stories" / f"{d.isoformat()}.bin"
         try:
             texts = decrypt(key, tpath.read_bytes()) if tpath.exists() else {}
         except Exception:
             texts = {}
         date_label = f"{d.day} {MONTHS[d.month - 1]} {d.year}"
-        stories = {a["id"]: make_story(a, reg, texts.get(a["id"], ""), date_label) for reg, arts in ed["regions"].items() for a in arts}
+
+        def one(item):
+            reg, a = item
+            sents = sentences(texts.get(a["id"], "")) or sentences(a["summary"]) or [a["title"]]
+            story = make_story(a, reg, sents, date_label)
+            return a["id"], context.enrich(wiki, story, a, reg, sents, pool, idf, d)
+
+        items = [(reg, a) for reg, arts in ed["regions"].items() for a in arts]
+        stories = dict(r for r in parallel(one, items, workers=3) if r)
         old = None
         if spath.exists():
             try:
@@ -378,4 +392,6 @@ def update(days):
             spath.parent.mkdir(parents=True, exist_ok=True)
             spath.write_bytes(encrypt(key, stories))
         total += len(stories)
-    log(f"Scénarios « En un coup d'œil » : {total} articles résumés")
+    wiki.save()
+    context.report(wiki, total)
+    log(f"Schémas « En un coup d'œil » : {total} articles résumés")

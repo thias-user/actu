@@ -8,7 +8,7 @@ puis Partager → « Sur l'écran d'accueil ». Adresse : https://thias-user.git
 
 <img src="qr-code-actu.png" alt="QR code d'installation d'ACTU" width="260">
 
-## Les 6 onglets
+## Les 5 onglets
 
 | Onglet | Contenu |
 | --- | --- |
@@ -16,7 +16,6 @@ puis Partager → « Sur l'écran d'accueil ». Adresse : https://thias-user.git
 | **Explorer** | Tous les articles collectés, à trier par thème, date, source ou importance, et à filtrer par région, période ou mot-clé. |
 | **Le 20h** | Les journaux de 20h de TF1 (TF1+) et de France 2 (france.tv) des 14 derniers jours, avec les sujets du JT de TF1. |
 | **ARTE** | Les reportages en accès libre sur les chaînes YouTube d'ARTE, classés par sujet (géopolitique, histoire, philosophie, art…) et par région du monde. |
-| **TikTok** | Les dernières vidéos des comptes officiels des grands médias (Le Monde, franceinfo, AFP, BBC, Reuters, New York Times, El País…), via le module d'intégration de TikTok. |
 | **Recherche** | Recherche par mots-clés dans les publications scientifiques (OpenAlex, HAL), et une sélection par thème renouvelée tous les 3 mois. |
 
 Dans **Réglages** (roue dentée) : régions affichées, leur ordre et le **nombre d'articles par région (jusqu'à tous)**, centres d'intérêt,
@@ -30,10 +29,17 @@ enregistré dans le secret GitHub `ACTU_READ_KEY`. Seule l'application où ce co
 
 ## En un coup d'œil
 
-À la fin de chaque article, une mini-vidéo en pixel art résume l'information en 5 étapes sous-titrées : **Où ?** (le monument
-du pays ou de la ville), **Qui ?** (les acteurs, en costume selon leur rôle), **Quoi ?** (l'action), **Liens** (qui est lié à qui)
-et **Et après ?** (les conséquences). Le scénario est calculé gratuitement par le robot à partir du texte de l'article (aucun
-service payant) et chiffré avec le code de lecture ; sans code, l'application en fait une version simplifiée à partir du titre.
+À la fin de chaque article, un **schéma de pensée** animé, au format rectangle, résume l'information case par case :
+**Où ?** (le lieu, avec sa fiche), **Qui ?** (chaque acteur, avec sa photo et sa présentation tirées de Wikipédia),
+**Quoi ?** (l'action et les phrases clés de l'article), **Liens** (qui s'oppose à qui, qui soutient qui), **Pour comprendre**
+(une page Wikipédia sur le sujet et les articles du même sujet publiés dans ACTU avant ou après) et **Et après ?** (les suites
+annoncées). La caméra s'approche de chaque case, puis montre le schéma entier ; touchez une case pour l'agrandir, et le bouton
+plein écran affiche le schéma sur tout le téléphone (en paysage).
+
+Tout est gratuit, sans clé ni service payant : le robot repère les acteurs et les relations dans le texte, puis vérifie chaque
+fiche Wikipédia contre l'article avant de la garder (mieux vaut pas de fiche qu'une fiche fausse). Les fiches sont gardées 30 jours
+dans le cache du robot. Le schéma est chiffré avec le code de lecture ; sans code, l'application en fait une version courte
+à partir du titre et du résumé.
 
 ## Comment ça marche
 
