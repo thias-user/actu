@@ -138,7 +138,7 @@ function regionPrefs() {
   return list;
 }
 
-/* Traduction en français (option des Réglages) : faite chaque matin par le robot, gratuitement (Argos Translate). */
+/* Traduction en français (option des Réglages) : faite chaque matin par le robot, gratuitement (modèles OPUS-MT). */
 const LANG_FROM = { en: 'de l’anglais', es: 'de l’espagnol' };
 function translating() { return store.get('translate', false); }
 /** Titre et résumé à afficher : la traduction française si elle est demandée (réglage, ou bouton de l'article). */

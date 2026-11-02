@@ -33,9 +33,10 @@ Option **Traduire en français** dans Réglages (désactivée au départ) : les 
 (Amérique latine) s'affichent en français : titres, résumés, textes complets et schémas. Dans chaque article, un bouton
 « Voir l'original » / « Traduire en français » change d'avis pour cet article seulement.
 
-Gratuit et sans clé : le robot traduit chaque matin avec les modèles libres d'**Argos Translate** (anglais → français ; espagnol →
-anglais → français), qui tournent sur la machine de GitHub. Les modèles (≈ 350 Mo) restent dans le cache de GitHub ; rien n'est
-stocké sur le téléphone. Les textes complets traduits sont chiffrés avec le code de lecture, comme les originaux. C'est une
+Gratuit et sans clé : le robot traduit chaque matin avec les modèles libres **OPUS-MT** de l'université d'Helsinki
+(anglais → français, espagnol → français), qui tournent sur la machine de GitHub. Les modèles sont préparés une fois puis
+gardés dans le cache de GitHub ; rien n'est stocké sur le téléphone. Les textes complets traduits sont chiffrés avec le code
+de lecture, comme les originaux. Chaque passage traduit au plus 14 minutes de textes complets, les plus récents d'abord. C'est une
 traduction automatique : fiable pour comprendre l'essentiel, moins élégante qu'un traducteur humain.
 
 ## En un coup d'œil

@@ -49,11 +49,26 @@ jobs:
           path: robot/state
           key: actu-state-${{ github.run_id }}
           restore-keys: actu-state-
-      - name: Modèles de traduction gratuits (Argos Translate, téléchargés une fois)
-        uses: actions/cache@v4
+      - name: Modèles de traduction gratuits (OPUS-MT, préparés une fois)
+        id: models
+        uses: actions/cache/restore@v4
         with:
           path: robot/models
-          key: argos-1.9-en_fr-es_en
+          key: opus-mt-ct2-en_fr-es_fr-1
+      - name: Préparation des modèles de traduction (seulement la première fois)
+        id: prep
+        if: steps.models.outputs.cache-hit != 'true'
+        continue-on-error: true
+        run: |
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install "transformers>=4.40,<5"
+          python robot/translate.py prepare
+      - name: Mise en cache des modèles de traduction
+        if: steps.models.outputs.cache-hit != 'true' && steps.prep.outcome == 'success'
+        uses: actions/cache/save@v4
+        with:
+          path: robot/models
+          key: opus-mt-ct2-en_fr-es_fr-1
       - name: Collecte des articles, replays, ARTE, recherche
         env:
           OPENALEX_API_KEY: ${{ secrets.OPENALEX_API_KEY }}

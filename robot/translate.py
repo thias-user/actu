@@ -1,68 +1,42 @@
 """Traduction en français des articles en anglais et en espagnol (option « Traduire en français » des Réglages).
 
-Gratuit et sans clé : les modèles libres d'Argos Translate, qui tournent sur la machine de GitHub (moteur CTranslate2).
-Anglais → français directement ; espagnol → anglais → français (il n'existe pas de modèle direct). Les modèles
-(≈ 350 Mo) sont téléchargés une fois puis gardés dans le cache de GitHub : rien n'est stocké sur le téléphone.
+Gratuit et sans clé : les modèles libres OPUS-MT de l'université d'Helsinki (anglais → français, espagnol → français),
+qui tournent sur la machine de GitHub avec le moteur CTranslate2. Ils sont préparés une seule fois
+(`python robot/translate.py prepare`) puis gardés dans le cache de GitHub : rien n'est stocké sur le téléphone.
   - titres et résumés : dans l'édition du jour (champ "tr"), publics comme les originaux ;
   - textes complets : chiffrés avec le code de lecture, comme les originaux → app/data/texts-fr/AAAA-MM-JJ.bin
 """
-import io
 import os
 import re
+import sys
 import time
-import zipfile
 
-from common import DATA, ROOT, detect_lang, fetch, log, read_json, write_json
+from common import DATA, ROOT, detect_lang, log, read_json, write_json
 from fulltext import decrypt, encrypt, key_from
 from news import day_path
 
 MODELS = ROOT / "robot" / "models"
-PACKAGES = {("en", "fr"): "https://argos-net.com/v1/translate-en_fr-1_9.argosmodel",
-            ("es", "en"): "https://argos-net.com/v1/translate-es_en-1_9.argosmodel"}
-ROUTE = {"en": [("en", "fr")], "es": [("es", "en"), ("en", "fr")]}
+OPUS = {"en": "Helsinki-NLP/opus-mt-en-fr", "es": "Helsinki-NLP/opus-mt-es-fr"}
 REGION_LANG = {"eu": "en", "us": "en", "latam": "es"}
 SENT_RE = re.compile(r"(?<=[.!?…»”\"])\s+(?=[«“\"¿¡A-ZÀ-ÖØ-Þ0-9])")
 BATCH = 32
-MAX_TEXT_SENTENCES = 7000  # par passage, pour rester dans le temps alloué (la suite le lendemain)
+TEXT_SECONDS = 14 * 60  # temps de traduction des textes complets par passage (la suite le lendemain)
 
 
 def split(paragraph):
     return [s.strip() for s in SENT_RE.split(paragraph) if s.strip()]
 
 
-class SentencePiece:
-    """Découpage en sous-mots des modèles récents (anglais → français)."""
-
-    def __init__(self, path):
-        import sentencepiece
-        self.sp = sentencepiece.SentencePieceProcessor(model_file=str(path))
-
-    def encode(self, sentences):
-        return self.sp.encode(sentences, out_type=str)
-
-    def decode(self, tokens):
-        return self.sp.decode(tokens)
-
-
-class MosesBPE:
-    """Découpage des modèles plus anciens (espagnol → anglais) : mots à la manière de Moses, puis sous-mots BPE."""
-
-    def __init__(self, path, src, dst):
-        from sacremoses import MosesDetokenizer, MosesPunctNormalizer, MosesTokenizer
-        from subword_nmt.apply_bpe import BPE
-        self.normalizer, self.tokenizer, self.detokenizer = MosesPunctNormalizer(src), MosesTokenizer(src), MosesDetokenizer(dst)
-        with open(path, encoding="utf-8") as f:
-            self.bpe = BPE(f)
-
-    def encode(self, sentences):
-        out = []
-        for s in sentences:
-            words = self.tokenizer.tokenize(self.normalizer.normalize(s))
-            out.append(self.bpe.segment_tokens(words))
-        return out
-
-    def decode(self, tokens):
-        return self.detokenizer.detokenize(" ".join(tokens).replace("@@ ", "").split(" "))
+def prepare():
+    """Télécharge les modèles OPUS-MT et les convertit pour CTranslate2 (une fois : le résultat est mis en cache)."""
+    import ctranslate2.converters
+    for src, name in OPUS.items():
+        out = MODELS / f"opus-{src}-fr"
+        if (out / "model.bin").exists():
+            continue
+        log(f"Préparation du modèle de traduction {name}")
+        ctranslate2.converters.TransformersConverter(name, copy_files=["source.spm", "target.spm"]).convert(
+            str(out), quantization="int8", force=True)
 
 
 class Translator:
@@ -77,48 +51,38 @@ class Translator:
 
     @property
     def broken(self):
-        return len(self.failed) == len(ROUTE)
+        return len(self.failed) == len(OPUS)
 
-    def _load(self, pair):
-        if pair in self.models:
-            return self.models[pair]
-        import ctranslate2
-        folder = MODELS / f"{pair[0]}_{pair[1]}"
-        if not (folder / "ok").exists():
-            log(f"  Téléchargement du modèle de traduction {pair[0]} → {pair[1]} (une seule fois)")
-            blob = fetch(PACKAGES[pair], timeout=120, retries=2)
-            folder.mkdir(parents=True, exist_ok=True)
-            with zipfile.ZipFile(io.BytesIO(blob)) as z:
-                z.extractall(folder)
-            (folder / "ok").write_text("ok")
-        model_dir = next(folder.rglob("model.bin")).parent
-        spm = next(folder.rglob("sentencepiece.model"), None)
-        tokenizer = SentencePiece(spm) if spm else MosesBPE(next(folder.rglob("bpe.model")), *pair)
-        engine = ctranslate2.Translator(str(model_dir), device="cpu", compute_type="int8", intra_threads=os.cpu_count() or 2)
-        self.models[pair] = (engine, tokenizer)
-        return self.models[pair]
+    def _load(self, src):
+        if src not in self.models:
+            import ctranslate2
+            import sentencepiece
+            folder = MODELS / f"opus-{src}-fr"
+            if not (folder / "model.bin").exists():
+                raise RuntimeError(f"modèle {OPUS[src]} absent (python robot/translate.py prepare)")
+            engine = ctranslate2.Translator(str(folder), device="cpu", compute_type="int8", intra_threads=os.cpu_count() or 2)
+            self.models[src] = (engine, sentencepiece.SentencePieceProcessor(model_file=str(folder / "source.spm")))
+        return self.models[src]
 
-    def _run(self, pair, sentences):
-        engine, sp = self._load(pair)
+    def _run(self, src, sentences, beam):
+        engine, sp = self._load(src)
         out = []
         for i in range(0, len(sentences), BATCH):
-            pieces = [p[:250] for p in sp.encode(sentences[i:i + BATCH])]
-            results = engine.translate_batch(pieces, beam_size=2, max_decoding_length=320, replace_unknowns=True)
-            out += [sp.decode(r.hypotheses[0]).strip() for r in results]
+            pieces = [p[:250] + ["</s>"] for p in sp.encode(sentences[i:i + BATCH], out_type=str)]
+            results = engine.translate_batch(pieces, beam_size=beam, max_decoding_length=320)
+            out += ["".join(r.hypotheses[0]).replace("▁", " ").strip() for r in results]
         return out
 
-    def translate(self, texts, src):
+    def translate(self, texts, src, beam=4):
         """Liste de textes (paragraphes séparés par des retours à la ligne) → même liste en français."""
-        if src not in ROUTE or src in self.failed:
+        if src not in OPUS or src in self.failed:
             raise RuntimeError(f"traduction {src} → fr indisponible")
         layout = [[split(p) for p in (t or "").split("\n")] for t in texts]
         todo = list(dict.fromkeys(s for paras in layout for p in paras for s in p if (src, s) not in self.cache))
         if todo:
             start = time.time()
             try:
-                cur = todo
-                for pair in ROUTE[src]:
-                    cur = self._run(pair, cur)
+                cur = self._run(src, todo, beam)
             except Exception:
                 self.failed.add(src)  # modèle introuvable ou illisible : on n'insiste pas pendant ce passage
                 raise
@@ -138,13 +102,12 @@ def update(days, tr):
     code = os.environ.get("ACTU_READ_KEY", "").strip()
     key = key_from(code) if code else None
     titles = texts_done = 0
-    budget, limited = MAX_TEXT_SENTENCES, False
+    # 1. titres et résumés de toutes les éditions (courts, publics comme les originaux)
     for d in days:
         ed = read_json(day_path(d))
         if not ed:
             continue
         arts = [(reg, a) for reg, lst in ed["regions"].items() for a in lst]
-        # titres et résumés (publics, comme les originaux)
         changed = False
         for src in ("en", "es"):
             items = [a for reg, a in arts if "tr" not in a and source_lang(reg, a) == src]
@@ -162,11 +125,12 @@ def update(days, tr):
             changed = True
         if changed:
             write_json(day_path(d), ed)
-        # textes complets (chiffrés avec le code de lecture)
-        if not key:
-            continue
+    # 2. textes complets, chiffrés avec le code de lecture ; l'édition la plus récente d'abord, dans le temps alloué
+    limited, start = False, time.time()
+    for d in sorted(days, reverse=True) if key else []:
+        ed = read_json(day_path(d))
         tpath, fpath = DATA / "texts" / f"{d.isoformat()}.bin", DATA / "texts-fr" / f"{d.isoformat()}.bin"
-        if not tpath.exists():
+        if not ed or not tpath.exists():
             continue
         try:
             texts = decrypt(key, tpath.read_bytes())
@@ -176,32 +140,27 @@ def update(days, tr):
             done = decrypt(key, fpath.read_bytes()) if fpath.exists() else {}
         except Exception:
             done = {}
-        langs = {a["id"]: source_lang(reg, a) for reg, a in arts}
+        langs = {a["id"]: source_lang(reg, a) for reg, lst in ed["regions"].items() for a in lst}
         fresh = 0
-        for src in ("en", "es"):
-            ids = [i for i, t in texts.items() if t and langs.get(i) == src and i not in done]
-            batch = []
-            for i in ids:
-                n = len(split(texts[i]))
-                if n > budget:
-                    limited = True
-                    break
-                budget -= n
-                batch.append(i)
-            if batch and src not in tr.failed:
-                try:
-                    for i, t in zip(batch, tr.translate([texts[i] for i in batch], src)):
-                        done[i] = t
-                    fresh += len(batch)
-                except Exception as e:
-                    log(f"  Traduction des textes {src} → fr impossible : {type(e).__name__} {str(e)[:120]}")
+        for i, t in texts.items():
+            src = langs.get(i)
+            if not t or src not in OPUS or src in tr.failed or i in done:
+                continue
+            if time.time() - start > TEXT_SECONDS:
+                limited = True
+                break
+            try:
+                done[i] = tr.translate([t], src, beam=2)[0]
+                fresh += 1
+            except Exception as e:
+                log(f"  Traduction des textes {src} → fr impossible : {type(e).__name__} {str(e)[:120]}")
         done = {i: t for i, t in done.items() if i in texts}
         if fresh or (done and not fpath.exists()):
             fpath.parent.mkdir(parents=True, exist_ok=True)
             fpath.write_bytes(encrypt(key, done))
         texts_done += len(done)
     log(f"Traduction : {titles} titres et résumés, {texts_done} textes complets disponibles en français "
-        f"({tr.sentences} phrases traduites en {tr.seconds:.0f} s)" + (" — limite atteinte, la suite demain" if limited else ""))
+        f"({tr.sentences} phrases traduites en {tr.seconds:.0f} s)" + (" — temps écoulé, la suite au prochain passage" if limited else ""))
 
 
 def translate_stories(tr, stories, langs):
@@ -237,3 +196,8 @@ def translate_stories(tr, stories, langs):
                 t.setdefault("act", {})[str(k)] = text
             else:
                 t["ctx"] = text
+
+
+if __name__ == "__main__":
+    if sys.argv[1:] == ["prepare"]:
+        prepare()
