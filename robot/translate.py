@@ -30,21 +30,59 @@ def split(paragraph):
     return [s.strip() for s in SENT_RE.split(paragraph) if s.strip()]
 
 
+class SentencePiece:
+    """Découpage en sous-mots des modèles récents (anglais → français)."""
+
+    def __init__(self, path):
+        import sentencepiece
+        self.sp = sentencepiece.SentencePieceProcessor(model_file=str(path))
+
+    def encode(self, sentences):
+        return self.sp.encode(sentences, out_type=str)
+
+    def decode(self, tokens):
+        return self.sp.decode(tokens)
+
+
+class MosesBPE:
+    """Découpage des modèles plus anciens (espagnol → anglais) : mots à la manière de Moses, puis sous-mots BPE."""
+
+    def __init__(self, path, src, dst):
+        from sacremoses import MosesDetokenizer, MosesPunctNormalizer, MosesTokenizer
+        from subword_nmt.apply_bpe import BPE
+        self.normalizer, self.tokenizer, self.detokenizer = MosesPunctNormalizer(src), MosesTokenizer(src), MosesDetokenizer(dst)
+        with open(path, encoding="utf-8") as f:
+            self.bpe = BPE(f)
+
+    def encode(self, sentences):
+        out = []
+        for s in sentences:
+            words = self.tokenizer.tokenize(self.normalizer.normalize(s))
+            out.append(self.bpe.segment_tokens(words))
+        return out
+
+    def decode(self, tokens):
+        return self.detokenizer.detokenize(" ".join(tokens).replace("@@ ", "").split(" "))
+
+
 class Translator:
     """Traduit des textes phrase par phrase ; une phrase déjà traduite pendant ce passage n'est pas refaite."""
 
     def __init__(self):
         self.models = {}
         self.cache = {}
-        self.broken = False
+        self.failed = set()  # langues dont le modèle n'a pas pu être chargé pendant ce passage
         self.sentences = 0
         self.seconds = 0.0
+
+    @property
+    def broken(self):
+        return len(self.failed) == len(ROUTE)
 
     def _load(self, pair):
         if pair in self.models:
             return self.models[pair]
         import ctranslate2
-        import sentencepiece
         folder = MODELS / f"{pair[0]}_{pair[1]}"
         if not (folder / "ok").exists():
             log(f"  Téléchargement du modèle de traduction {pair[0]} → {pair[1]} (une seule fois)")
@@ -54,24 +92,25 @@ class Translator:
                 z.extractall(folder)
             (folder / "ok").write_text("ok")
         model_dir = next(folder.rglob("model.bin")).parent
-        spm = next(folder.rglob("sentencepiece.model"))
+        spm = next(folder.rglob("sentencepiece.model"), None)
+        tokenizer = SentencePiece(spm) if spm else MosesBPE(next(folder.rglob("bpe.model")), *pair)
         engine = ctranslate2.Translator(str(model_dir), device="cpu", compute_type="int8", intra_threads=os.cpu_count() or 2)
-        self.models[pair] = (engine, sentencepiece.SentencePieceProcessor(model_file=str(spm)))
+        self.models[pair] = (engine, tokenizer)
         return self.models[pair]
 
     def _run(self, pair, sentences):
         engine, sp = self._load(pair)
         out = []
         for i in range(0, len(sentences), BATCH):
-            pieces = [p[:250] for p in sp.encode(sentences[i:i + BATCH], out_type=str)]
+            pieces = [p[:250] for p in sp.encode(sentences[i:i + BATCH])]
             results = engine.translate_batch(pieces, beam_size=2, max_decoding_length=320, replace_unknowns=True)
             out += [sp.decode(r.hypotheses[0]).strip() for r in results]
         return out
 
     def translate(self, texts, src):
         """Liste de textes (paragraphes séparés par des retours à la ligne) → même liste en français."""
-        if src not in ROUTE or self.broken:
-            raise RuntimeError("traduction indisponible")
+        if src not in ROUTE or src in self.failed:
+            raise RuntimeError(f"traduction {src} → fr indisponible")
         layout = [[split(p) for p in (t or "").split("\n")] for t in texts]
         todo = list(dict.fromkeys(s for paras in layout for p in paras for s in p if (src, s) not in self.cache))
         if todo:
@@ -81,7 +120,7 @@ class Translator:
                 for pair in ROUTE[src]:
                     cur = self._run(pair, cur)
             except Exception:
-                self.broken = True  # modèle introuvable ou illisible : on n'insiste pas pendant ce passage
+                self.failed.add(src)  # modèle introuvable ou illisible : on n'insiste pas pendant ce passage
                 raise
             self.cache.update({(src, s): t for s, t in zip(todo, cur)})
             self.sentences += len(todo)
@@ -111,9 +150,14 @@ def update(days, tr):
             items = [a for reg, a in arts if "tr" not in a and source_lang(reg, a) == src]
             if not items:
                 continue
-            out = tr.translate([x for a in items for x in (a["title"], a.get("summary") or "")], src)
+            try:
+                out = tr.translate([x for a in items for x in (a["title"], a.get("summary") or "")], src)
+            except Exception as e:
+                log(f"  Traduction {src} → fr impossible : {type(e).__name__} {str(e)[:120]}")
+                continue
             for i, a in enumerate(items):
                 a["tr"] = {"t": out[2 * i], "s": out[2 * i + 1], "l": src}
+            log(f"  ex. ({src}) {items[0]['title'][:70]} → {out[0][:70]}")
             titles += len(items)
             changed = True
         if changed:
@@ -144,10 +188,13 @@ def update(days, tr):
                     break
                 budget -= n
                 batch.append(i)
-            if batch:
-                for i, t in zip(batch, tr.translate([texts[i] for i in batch], src)):
-                    done[i] = t
-                fresh += len(batch)
+            if batch and src not in tr.failed:
+                try:
+                    for i, t in zip(batch, tr.translate([texts[i] for i in batch], src)):
+                        done[i] = t
+                    fresh += len(batch)
+                except Exception as e:
+                    log(f"  Traduction des textes {src} → fr impossible : {type(e).__name__} {str(e)[:120]}")
         done = {i: t for i, t in done.items() if i in texts}
         if fresh or (done and not fpath.exists()):
             fpath.parent.mkdir(parents=True, exist_ok=True)
@@ -178,7 +225,7 @@ def translate_stories(tr, stories, langs):
         if c and c.get("l") in jobs and c.get("x"):
             jobs[c["l"]].append((st, ("ctx", 0), c["x"]))
     for src, items in jobs.items():
-        if not items:
+        if not items or src in tr.failed:
             continue
         for (st, (kind, k), _), text in zip(items, tr.translate([x for _, _, x in items], src)):
             t = st.setdefault("tr", {})
