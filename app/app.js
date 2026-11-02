@@ -1,7 +1,7 @@
 /* ACTU — application web installable. Aucune donnée n'est stockée sur le téléphone hormis vos réglages. */
 'use strict';
 
-const VERSION = '1.1.0';
+const VERSION = '1.2.0';
 const DATA = 'data/';
 const REGIONS = {
   fr: { label: 'France', flag: '🇫🇷', color: 'var(--fr)', ink: '#fff' },
@@ -274,7 +274,7 @@ function articleSlide(a, region, i, n, date) {
     openArticle(a, region, date);
   });
   el.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') openArticle(a, region, date); });
-  Pixel.mount($('canvas', el), a.scene || Pixel.fallback(a), a.id, { width: 80, ground: 0.47, labelY: 0.13 });
+  Pixel.mount($('canvas', el), a.scene || Pixel.fallback(a), a.id, { width: 80, ground: 0.5, labelY: 0.12 });
   return el;
 }
 
@@ -317,15 +317,24 @@ function openArticle(a, region, date) {
       ${unavailable}
       ${a.also?.length ? `<p class="small">Sujet aussi traité par : ${a.also.map(esc).join(', ')}.</p>` : ''}
       <h3 class="section-title">En un coup d’œil</h3>
-      <canvas class="scene-box" aria-label="Scène animée résumant l’article"></canvas>
+      <div class="story">
+        <div class="story-bars"></div>
+        <canvas class="scene-box" aria-label="Vidéo schématique résumant l’article"></canvas>
+        <div class="story-cap"><b class="story-step">OÙ ?</b><p class="story-text"></p></div>
+        <div class="story-nav">
+          <button class="icon-btn" data-sprev aria-label="Étape précédente"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
+          <button class="icon-btn" data-spause aria-label="Pause"><svg viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></svg></button>
+          <button class="icon-btn" data-snext aria-label="Étape suivante"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>
+        </div>
+      </div>
       <h3 class="section-title">Sur les réseaux</h3>
       ${a.posts?.length ? `<div class="posts">${a.posts.map(postHTML).join('')}</div>`
         : '<p class="small">Aucune publication pertinente des chaînes d’information et créateurs suivis (HugoDécrypte, Ulyces, franceinfo, Le Monde, AFP…) pour l’instant. ACTU vérifie à nouveau chaque matin.</p>'}
     </div>`, (body) => {
     $('[data-share]', body).addEventListener('click', () => share(a.title, a.url));
     bindPosts(body);
-    Pixel.mount($('.scene-box', body), a.scene || Pixel.fallback(a), a.id + ':fiche', { width: 128, ground: 0.8, labelY: 0.1 });
     if (a.full) showFullText(a, date, $('#fulltext', body));
+    playStory(a, region, date, $('.story', body));
   });
 }
 
@@ -344,12 +353,15 @@ const reader = {
     this.keyFor = code;
     return this.key;
   },
-  texts(date) {
-    if (!this.files.has(date)) {
+  texts(date) { return this.load('texts', date); },
+  stories(date) { return this.load('stories', date); },
+  load(kind, date) {
+    const id = kind + '/' + date;
+    if (!this.files.has(id)) {
       const job = (async () => {
         if (typeof DecompressionStream === 'undefined') throw new Error('old');
         const key = await this.getKey();
-        const res = await fetch(`${DATA}texts/${date}.bin`, { cache: date === state.index.days[0] ? 'no-cache' : 'default' });
+        const res = await fetch(`${DATA}${kind}/${date}.bin`, { cache: date === state.index.days[0] ? 'no-cache' : 'default' });
         if (res.status === 404) return {};
         if (!res.ok) throw new Error('net');
         const buf = new Uint8Array(await res.arrayBuffer());
@@ -358,13 +370,73 @@ const reader = {
         const stream = new Blob([plain]).stream().pipeThrough(new DecompressionStream('gzip'));
         return JSON.parse(await new Response(stream).text());
       })();
-      job.catch(() => this.files.delete(date));
-      this.files.set(date, job);
+      job.catch(() => this.files.delete(id));
+      this.files.set(id, job);
     }
-    return this.files.get(date);
+    return this.files.get(id);
   },
   reset() { this.files.clear(); this.key = null; this.keyFor = ''; },
 };
+/* ---------------------------------------------------------------- « En un coup d'œil » */
+const TOPIC_ACTION = { guerre: 'attaque', diplomatie: 'negocie', election: 'vote', gouvernement: 'annonce', manifestation: 'manifeste', justice: 'juge',
+  police: 'arrete', catastrophe: 'accident', climat: 'avertit', espace: 'lance', sante: 'sante', science: 'decouvre', cyber: 'attaque', tech: 'lance',
+  energie: 'hausse', bourse: 'hausse', economie: 'hausse', agriculture: 'annonce', migration: 'aide', education: 'annonce', religion: 'annonce',
+  transport: 'accident', f1: 'victoire', sport: 'victoire', musique: 'annonce', mode: 'annonce', culture: 'annonce' };
+const ACTION_VERB = { attaque: 'ATTAQUE', negocie: 'NEGOCIE', vote: 'VOTE', annonce: 'ANNONCE', manifeste: 'MOBILISATION', juge: 'JUSTICE',
+  arrete: 'ENQUETE', accident: 'DRAME', avertit: 'ALERTE', lance: 'LANCEMENT', sante: 'SANTE', decouvre: 'DECOUVERTE', hausse: 'HAUSSE',
+  baisse: 'BAISSE', aide: 'AIDE', victoire: 'GAGNE' };
+const GROUP = { politician: 'Gouvernement', citizen: 'Habitants', police: 'Police', firefighter: 'Secours', doctor: 'Médecins', athlete: 'Athlètes',
+  racer: 'Pilotes', soldier: 'Armée', business: 'Entreprises', worker: 'Salariés', protester: 'Manifestants', student: 'Élèves', teacher: 'Enseignants',
+  judge: 'Justice', scientist: 'Chercheurs', artist: 'Artistes', musician: 'Musiciens', model: 'Mannequins', hacker: 'Pirates', farmer: 'Agriculteurs',
+  astronaut: 'Astronautes', priest: 'Église', journalist: 'Journalistes' };
+const tagOf = (name) => String(name).normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().split(/\s+/).pop().replace(/[^A-Z0-9-]/g, '').slice(0, 10);
+/** Scénario simplifié tiré du titre et du résumé (quand le code de lecture n'est pas saisi). */
+function storyFrom(a, region, date) {
+  const sc = a.scene || Pixel.fallback(a);
+  const country = sc.country || { fr: 'fr', us: 'us', eu: 'eu' }[region] || 'latam';
+  const names = [...new Set((a.title + ' ' + a.summary).match(/\b[A-ZÉÈÀÂÎÔÛÇ][a-zà-ÿ'’-]+(?:\s+[A-ZÉÈÀÂÎÔÛÇ][a-zà-ÿ'’-]+)+/g) || [])].slice(0, 2);
+  const cast = (sc.cast || ['citizen']).slice(0, 2);
+  const actors = cast.map((role, i) => ({ name: names[i] || GROUP[role] || 'Habitants', tag: tagOf(names[i] || GROUP[role] || 'Habitants'), role, country: (sc.flags || [])[i] || country }));
+  const kind = sc.dir === 'down' ? 'baisse' : TOPIC_ACTION[sc.topic] || 'annonce';
+  const sentences = (a.summary || '').split(/(?<=[.!?])\s+/).filter((x) => x.length > 20);
+  const place = sc.city ? cap(sc.city.toLowerCase()) : (Pixel.countryName(country) ? cap(Pixel.countryName(country).toLowerCase()) : 'Dans le monde');
+  return {
+    place: { country, city: sc.city || '' },
+    actors,
+    action: { who: 0, verb: ACTION_VERB[kind] || 'ACTU', kind, target: actors.length > 1 ? 1 : -1 },
+    links: actors.length > 1 ? [{ from: 0, to: 1, rel: 'LIEN', nature: kind === 'attaque' ? 'oppose' : kind === 'negocie' ? 'negocie' : 'depend' }] : [],
+    consequences: [{ text: sentences[1] || `À suivre : ${a.source}${a.also?.length ? ', ' + a.also.slice(0, 2).join(', ') : ''} couvrent le sujet.`, kind: 'autre' }],
+    captions: {
+      ou: `${place} · ${cap(fmtLong.format(new Date(date + 'T12:00:00')))}`,
+      qui: 'En jeu : ' + actors.map((x) => x.name).join(', ') + '.',
+      quoi: a.title,
+      liens: sentences[0] || (a.also?.length ? `Sujet aussi traité par ${a.also.slice(0, 3).join(', ')}.` : a.source),
+      consequences: sentences[1] || `À suivre : ${a.source}${a.also?.length ? ', ' + a.also.slice(0, 2).join(', ') : ''} couvrent le sujet.`,
+    },
+  };
+}
+async function playStory(a, region, date, box) {
+  let story = null;
+  if (reader.code()) { try { story = (await reader.stories(date))[a.id] || null; } catch { story = null; } }
+  story = story || storyFrom(a, region, date);
+  if (!box.isConnected) return;
+  const bars = $('.story-bars', box), step = $('.story-step', box), text = $('.story-text', box);
+  const ctl = Pixel.mountStory($('canvas', box), story, a.scene || Pixel.fallback(a), a.id + ':story', (i, key, label) => {
+    const n = ctl ? ctl.steps().length : 5;
+    bars.innerHTML = Array.from({ length: n }, (_, k) => `<i class="${k < i ? 'done' : k === i ? 'on' : ''}"></i>`).join('');
+    step.textContent = label;
+    text.textContent = story.captions?.[key] || '';
+  });
+  $('[data-snext]', box).addEventListener('click', () => ctl.next());
+  $('[data-sprev]', box).addEventListener('click', () => ctl.prev());
+  $('canvas', box).addEventListener('click', (ev) => (ev.offsetX < ev.currentTarget.clientWidth / 3 ? ctl.prev() : ctl.next()));
+  $('[data-spause]', box).addEventListener('click', (ev) => {
+    const paused = ctl.toggle();
+    box.classList.toggle('paused', paused);
+    ev.currentTarget.innerHTML = paused ? '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>' : '<svg viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></svg>';
+  });
+}
+
 async function showFullText(a, date, box) {
   if (!reader.code()) {
     box.innerHTML = '<div class="unlock"><p>Le texte complet de cet article se lit directement dans ACTU.</p><button class="btn primary" data-action="settings">Saisir mon code de lecture</button></div>';
@@ -924,6 +996,7 @@ function* allLoadedArticles() {
 /* ---------------------------------------------------------------- onglets */
 const INIT = { explore: initExplore, replay: initReplay, arte: initArte, tiktok: initTiktok, research: initResearch };
 function showTab(name) {
+  document.body.classList.toggle('on-feed', name === 'feed');
   $$('.view').forEach((v) => v.classList.toggle('active', v.id === 'view-' + name));
   $$('.tabbar button').forEach((b) => (b.dataset.tab === name ? b.setAttribute('aria-current', 'page') : b.removeAttribute('aria-current')));
   if (INIT[name] && !state.inited.has(name)) { state.inited.add(name); INIT[name](); }

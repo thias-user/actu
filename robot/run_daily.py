@@ -15,6 +15,7 @@ import replays
 import research
 import scenes
 import social
+import stories
 from common import DATA, PARIS, iso, log, now_paris, read_json, write_json
 from news import day_path
 
@@ -60,6 +61,7 @@ def main():
                 write_json(day_path(d), ed)
         step("réseaux sociaux", social.update, recent)
         step("lecture intégrale", fulltext.update, recent)
+        step("scénarios", stories.update, recent)
     if args.only in (None, "replays"):
         step("replays", replays.update)
     if args.only in (None, "arte"):

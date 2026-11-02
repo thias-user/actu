@@ -523,8 +523,399 @@ const Pixel = (() => {
     mic(s, f) { const { p, W, G } = s, x = ((W / 2) | 0) + 8; if (f % 12 < 8) { p(x, G - 26, '#ffffff', 11, 6); p(x + 2, G - 20, '#ffffff', 2, 2); for (let k = 0; k < 3; k++) if (f % 12 > k * 2) p(x + 2 + k * 3, G - 24, '#333', 1, 1); } },
   };
 
+  /* ------------------------------------------------------------ monuments par pays (silhouettes simplifiées) */
+  function onion(p, x, top, c, w = 5) {
+    disc(p, x, top + 3, (w / 2) | 0, c);
+    p(x, top, c, 1, 2); p(x, top - 2, '#e2b13c', 1, 2);
+  }
+  function mosque(p, cx, G, dome, minarets = 2, wall = '#e6dcc4') {
+    disc(p, cx, G - 18, 9, dome);
+    p(cx - 13, G - 14, wall, 27, 14); p(cx - 3, G - 10, '#7a6a52', 6, 10);
+    p(cx, G - 30, dome, 1, 3); p(cx - 1, G - 31, '#e2b13c', 3, 1);
+    const xs = minarets === 4 ? [cx - 22, cx - 17, cx + 15, cx + 20] : [cx - 19, cx + 17];
+    xs.forEach((x) => { p(x, G - 32, wall, 3, 32); p(x, G - 35, dome, 3, 3); p(x + 1, G - 37, dome, 1, 2); });
+  }
+  const LANDMARKS = {
+    fr(p, cx, G) { // tour Eiffel
+      const h = 46, c = '#6e5a49';
+      for (let j = 0; j < h; j++) {
+        const t = j / h, half = Math.round(0.5 + Math.pow(t, 2.4) * 12), y = G - h + j;
+        if (t > 0.74) { const inner = Math.round(((t - 0.74) / 0.26) * 8); p(cx - half, y, c, half - inner, 1); p(cx + inner + 1, y, c, half - inner, 1); }
+        else p(cx - half, y, c, half * 2 + 1, 1);
+      }
+      p(cx - 6, G - 26, c, 13, 1); p(cx - 9, G - 13, c, 19, 2); p(cx, G - h - 4, c, 1, 4);
+      return [cx + 1, G - h - 4];
+    },
+    us(p, cx, G) { // Capitole
+      const w = '#ecebe4', d = '#c9c5b8';
+      disc(p, cx, G - 22, 10, w);
+      p(cx - 26, G - 12, w, 52, 12); for (let x = cx - 24; x < cx + 24; x += 4) p(x, G - 11, d, 1, 11);
+      p(cx - 11, G - 20, w, 22, 8); for (let x = cx - 9; x < cx + 10; x += 3) p(x, G - 19, d, 1, 7);
+      p(cx - 2, G - 35, w, 5, 4); p(cx, G - 40, d, 1, 5);
+      return [cx + 1, G - 40];
+    },
+    gb(p, cx, G) { // Big Ben et Westminster
+      const c = '#c9a86a', d = '#a88a52';
+      p(cx - 26, G - 16, c, 34, 16); for (let x = cx - 25; x < cx + 8; x += 4) { p(x, G - 20, d, 2, 4); p(x, G - 13, d, 1, 9); }
+      p(cx + 10, G - 44, c, 9, 44); disc(p, cx + 14, G - 35, 3, '#f5f0dc'); p(cx + 14, G - 37, '#333', 1, 2); p(cx + 14, G - 35, '#333', 2, 1);
+      for (let j = 0; j < 9; j++) p(cx + 14 - (j >> 1), G - 53 + j, '#6f6040', (j >> 1) * 2 + 1, 1);
+      return [cx + 14, G - 53];
+    },
+    de(p, cx, G) { // porte de Brandebourg
+      const c = '#d8cdb0', d = '#a99c7e';
+      p(cx - 22, G - 27, c, 44, 6); p(cx - 24, G - 21, d, 48, 2);
+      for (let i = 0; i < 6; i++) p(cx - 21 + i * 8, G - 19, c, 3, 19);
+      p(cx - 5, G - 32, '#5d6b4a', 10, 5); p(cx - 7, G - 30, '#5d6b4a', 2, 3); p(cx + 5, G - 30, '#5d6b4a', 2, 3);
+      return null;
+    },
+    ru(p, cx, G) { // Kremlin et Saint-Basile
+      const red = '#a83a2c';
+      p(cx - 32, G - 12, red, 64, 12); for (let x = cx - 32; x < cx + 32; x += 3) p(x, G - 14, red, 2, 2);
+      p(cx - 4, G - 34, red, 9, 22); disc(p, cx, G - 28, 2, '#f5f0dc');
+      for (let j = 0; j < 10; j++) p(cx - 4 + (j >> 1), G - 34 - j, '#2e6b4f', 9 - (j >> 1) * 2, 1);
+      p(cx, G - 46, '#e53935', 1, 2); p(cx - 1, G - 45, '#e53935', 3, 1);
+      [[cx + 18, G - 26, '#2e8b57'], [cx + 24, G - 22, '#d4a017'], [cx + 13, G - 21, '#c0392b']].forEach(([x, y, col]) => { p(x - 2, y + 5, '#c97a52', 5, G - y - 5); onion(p, x, y, col); });
+      return null;
+    },
+    ua(p, cx, G) { // Sainte-Sophie de Kiev
+      const w = '#f2efe6', gold = '#e2b13c';
+      p(cx - 22, G - 16, w, 44, 16); p(cx - 8, G - 26, w, 17, 10);
+      for (let x = cx - 19; x < cx + 20; x += 6) p(x, G - 12, '#7da6c9', 2, 6);
+      onion(p, cx, G - 36, gold, 9); onion(p, cx - 15, G - 25, gold, 5); onion(p, cx + 15, G - 25, gold, 5);
+      return null;
+    },
+    cn(p, cx, G) { // temple du Ciel
+      p(cx - 20, G - 4, '#e8e4d8', 40, 4);
+      for (let k = 0; k < 3; k++) {
+        const rw = 15 - k * 4, y = G - 10 - k * 9;
+        p(cx - rw + 3, y + 3, '#b03a2e', (rw - 3) * 2 + 1, 4); p(cx - rw, y, '#2b4f9e', rw * 2 + 1, 3);
+      }
+      p(cx, G - 36, '#e2b13c', 1, 4);
+      return null;
+    },
+    tw(p, cx, G) { for (let k = 0; k < 8; k++) p(cx - 5 + (k % 2), G - 6 - k * 5, '#6fa3a0', 11 - (k % 2) * 2, 5); p(cx, G - 50, '#6fa3a0', 1, 8); return null; },
+    it(p, cx, G) { // Colisée
+      for (let row = 0; row < 3; row++) {
+        const y = G - 9 - row * 9, x0 = cx - 28 + row * 2, w = 56 - row * 4 - (row === 2 ? 14 : 0);
+        p(x0, y, '#cfa77a', w, 9); for (let x = x0 + 2; x < x0 + w - 2; x += 5) p(x, y + 2, '#8a6440', 2, 6);
+      }
+      return null;
+    },
+    es(p, cx, G) { // Sagrada Família
+      p(cx - 16, G - 14, '#b99060', 32, 14);
+      for (let i = 0; i < 4; i++) { const x = cx - 13 + i * 8, h = 30 + (i % 3 === 0 ? 0 : 10); p(x, G - h, '#c8a46e', 4, h - 14); p(x + 1, G - h - 4, '#c8a46e', 2, 4); p(x + 1, G - h - 6, '#e8c070', 2, 2); }
+      return null;
+    },
+    be(p, cx, G) { // Atomium
+      const cy = G - 26, c = '#c9d1d9', tube = '#8a939c';
+      const pts = [[0, -14], [-10, -6], [10, -6], [0, 0], [-10, 6], [10, 6], [0, 14], [-6, -10], [6, 10]];
+      pts.forEach(([x, y]) => { for (let k = 0; k <= 10; k++) p(cx + Math.round(x * k / 10), cy + Math.round(y * k / 10), tube); });
+      pts.forEach(([x, y]) => disc(p, cx + x, cy + y, 3, c));
+      p(cx - 1, G - 12, tube, 3, 12);
+      return null;
+    },
+    eu(p, cx, G) { // Berlaymont
+      p(cx - 26, G - 24, '#cfd8e3', 52, 24);
+      for (let y = G - 22; y < G - 2; y += 3) p(cx - 25, y, '#9fb3c8', 50, 1);
+      p(cx - 2, G - 24, '#b8c6d6', 4, 24);
+      return [cx, G - 24];
+    },
+    br(p, cx, G) { // Christ Rédempteur
+      for (let j = 0; j < 30; j++) p(cx - 2 - j, G - 30 + j, '#3f7a3f', 5 + j * 2, 1);
+      p(cx, G - 42, '#ececec', 2, 12); p(cx - 5, G - 39, '#ececec', 12, 2); p(cx, G - 44, '#ececec', 2, 2);
+      return null;
+    },
+    ar(p, cx, G) { // Obélisque et Casa Rosada
+      p(cx - 26, G - 14, '#e8a0a8', 30, 14); for (let x = cx - 24; x < cx + 2; x += 5) p(x, G - 10, '#b9707a', 2, 6);
+      p(cx + 12, G - 40, '#f2f2ee', 4, 40); p(cx + 13, G - 43, '#f2f2ee', 2, 3);
+      return [cx - 11, G - 14];
+    },
+    mx(p, cx, G) { // pyramide
+      for (let k = 0; k < 6; k++) { const w = 44 - k * 7; p(cx - (w >> 1), G - 5 - k * 5, k % 2 ? '#a7834e' : '#b08d57', w, 5); }
+      p(cx - 2, G - 30, '#8e6b3a', 4, 30); p(cx - 5, G - 37, '#7a5a30', 10, 7);
+      return null;
+    },
+    jp(p, cx, G) { // torii et mont Fuji
+      for (let j = 0; j < 24; j++) p(cx - 4 - j * 2, G - 34 + j, '#7f8fb0', 9 + j * 4, 1);
+      p(cx - 4, G - 34, '#ffffff', 9, 2); p(cx - 7, G - 32, '#ffffff', 15, 2);
+      p(cx - 12, G - 22, '#d23a2a', 3, 22); p(cx + 9, G - 22, '#d23a2a', 3, 22);
+      p(cx - 18, G - 25, '#222', 36, 1); p(cx - 17, G - 24, '#d23a2a', 34, 3); p(cx - 13, G - 18, '#d23a2a', 26, 2);
+      return null;
+    },
+    in(p, cx, G) { // Taj Mahal
+      disc(p, cx, G - 24, 8, '#f8f6f0'); p(cx, G - 35, '#e2b13c', 1, 3);
+      p(cx - 22, G - 4, '#efeae0', 44, 4); p(cx - 14, G - 18, '#f4f1ea', 28, 14); p(cx - 3, G - 15, '#c9c1b2', 6, 11);
+      [cx - 22, cx + 19].forEach((x) => { p(x, G - 28, '#f4f1ea', 3, 24); p(x - 1, G - 30, '#f8f6f0', 5, 2); });
+      return null;
+    },
+    il(p, cx, G) { // dôme du Rocher (Jérusalem)
+      disc(p, cx, G - 21, 8, '#e2b13c');
+      p(cx - 17, G - 14, '#2f6fb0', 34, 14); for (let x = cx - 15; x < cx + 16; x += 4) p(x, G - 11, '#9cc7e8', 2, 6);
+      p(cx - 7, G - 17, '#2f6fb0', 14, 3);
+      return null;
+    },
+    ps(p, cx, G) { mosque(p, cx, G, '#9aa4ad', 1); return null; },
+    ir(p, cx, G) { mosque(p, cx, G, '#2f8fb0'); return null; },
+    sy(p, cx, G) { mosque(p, cx, G, '#9aa4ad'); return null; },
+    tr(p, cx, G) { mosque(p, cx, G, '#8f9aa3', 4, '#d9c9b0'); disc(p, cx - 8, G - 14, 4, '#8f9aa3'); disc(p, cx + 8, G - 14, 4, '#8f9aa3'); return null; },
+    lb(p, cx, G) { // cèdre
+      p(cx - 1, G - 10, '#5b3a1e', 3, 10);
+      for (let k = 0; k < 4; k++) p(cx - 16 + k * 3, G - 14 - k * 6, '#2f6b3f', 33 - k * 6, 4);
+      return null;
+    },
+    latam(p, cx, G) { // cathédrale coloniale
+      const c = '#f0d9a0', d = '#c9a96a';
+      p(cx - 18, G - 22, c, 36, 22); p(cx - 18, G - 34, c, 8, 12); p(cx + 10, G - 34, c, 8, 12);
+      disc(p, cx - 14, G - 35, 3, d); disc(p, cx + 14, G - 35, 3, d);
+      p(cx - 4, G - 14, '#6b4a2a', 8, 14); disc(p, cx, G - 14, 4, '#6b4a2a');
+      p(cx, G - 30, d, 1, 6); p(cx - 2, G - 28, d, 5, 1);
+      for (let i = 0; i < 3; i++) p(cx - 15 + i * 13, G - 20, '#6b4a2a', 2, 3);
+      return [cx, G - 30];
+    },
+    ca(p, cx, G) { // tour de la Paix
+      p(cx - 24, G - 14, '#c9b991', 48, 14); p(cx - 4, G - 38, '#c9b991', 9, 24); disc(p, cx, G - 31, 2, '#f5f0dc');
+      for (let j = 0; j < 8; j++) p(cx - 4 + (j >> 1), G - 38 - j, '#4f8f6f', 9 - (j >> 1) * 2, 1);
+      return [cx, G - 46];
+    },
+    oldtown(p, cx, G, r) { // maisons à pignon (Europe du Nord et de l'Est)
+      let x = cx - 30;
+      const cols = ['#d98c5f', '#e8c27a', '#8fb3a8', '#c96f6f', '#e6dcc4'];
+      for (let i = 0; i < 6; i++) {
+        const w = 9, h = 16 + ((r() * 8) | 0), c = cols[i % cols.length];
+        p(x, G - h, c, w, h);
+        for (let j = 0; j < 5; j++) p(x + j, G - h - j, c, w - j * 2, 1);
+        p(x + 3, G - h + 4, '#5a4a3a', 3, 4);
+        x += w + 1;
+      }
+      return null;
+    },
+  };
+  const LANDMARK_OF = { co: 'latam', ve: 'latam', cl: 'latam', pe: 'latam', cu: 'latam', ec: 'latam', uy: 'latam', pl: 'oldtown', bg: 'oldtown', se: 'oldtown', nl: 'oldtown', ie: 'oldtown', nato: 'eu' };
+  function landmark(s, code, cx, G, damaged) {
+    const fn = LANDMARKS[LANDMARK_OF[code] || code];
+    if (!fn) return null;
+    const top = fn(s.p, cx, G, s.r);
+    if (damaged) { // ruines : bâtiment noirci, trous, lueurs
+      const r = rng(hash(code) + 17);
+      for (let k = 0; k < 40; k++) s.p(cx - 26 + ((r() * 52) | 0), G - ((r() * 40) | 0), 'rgba(20,15,15,.55)', 2 + ((r() * 3) | 0), 2);
+    }
+    return top;
+  }
+
+  /* ------------------------------------------------------------ premier plan : le sol jusqu'en bas de l'écran */
+  const FOREGROUND = {
+    street(s) {
+      const { p, W, G, H } = s;
+      p(0, G, '#8a8f99', W, 3); p(0, G + 3, '#3b3f4a', W, 14);
+      for (let x = 2; x < W; x += 10) p(x, G + 9, '#e8e3c0', 5, 1);
+      p(0, G + 17, '#8a8f99', W, 2);
+      for (let y = G + 22; y < H; y += 6) for (let x = (y * 7) % 11; x < W; x += 11) p(x, y, 'rgba(0,0,0,.18)', 6, 1);
+    },
+    rubble(s) {
+      const { p, W, G, H } = s, r = rng(hash('rubble') + W);
+      FOREGROUND.street(s);
+      for (let k = 0; k < 60; k++) p((r() * W) | 0, G + ((r() * (H - G)) | 0), k % 3 ? '#5b5048' : '#7a6e64', 2 + ((r() * 3) | 0), 1 + ((r() * 2) | 0));
+      for (let k = 0; k < 3; k++) { const x = (r() * (W - 14)) | 0, y = G + 22 + ((r() * (H - G - 30)) | 0); p(x, y, '#2e2824', 12, 3); p(x + 2, y - 1, '#3e3630', 8, 1); }
+    },
+    grass(s) {
+      const { p, W, G, H } = s, r = rng(hash('grass') + W);
+      for (let k = 0; k < (W * (H - G)) / 18; k++) p((r() * W) | 0, G + ((r() * (H - G)) | 0), k % 2 ? 'rgba(0,0,0,.12)' : 'rgba(255,255,255,.08)', 1, 2);
+      for (let k = 0; k < 14; k++) p((r() * W) | 0, G + 4 + ((r() * (H - G - 4)) | 0), ['#f5f5f5', '#ffd23f', '#ff6f91'][k % 3], 1, 1);
+    },
+    sand(s) {
+      const { p, W, G, H } = s;
+      for (let y = G + 4; y < H; y += 5) for (let x = (y * 3) % 7; x < W; x += 7) p(x, y, 'rgba(120,80,30,.18)', 4, 1);
+      p(8, G + 10, '#4f8a4a', 2, 7); p(6, G + 12, '#4f8a4a', 2, 3); p(10, G + 13, '#4f8a4a', 2, 3);
+    },
+    pitch(s) { const { p, W, G, H } = s; for (let y = G; y < H; y += 8) p(0, y, 'rgba(255,255,255,.06)', W, 4); },
+    planks(s) { const { p, W, G, H } = s; for (let y = G + 3; y < H; y += 4) p(0, y, 'rgba(0,0,0,.25)', W, 1); for (let x = 5; x < W; x += 12) p(x, G, 'rgba(255,255,255,.05)', 1, H - G); },
+    moon(s) { const { p, W, G, H } = s; [[0.2, 0.3, 5], [0.7, 0.5, 7], [0.45, 0.8, 4]].forEach(([fx, fy, R]) => { disc(p, W * fx, G + (H - G) * fy, R, 'rgba(0,0,0,.25)'); }); },
+  };
+  const FG_OF = { city: 'street', night: 'street', capital: 'street', court: 'street', hospital: 'street', factory: 'street', ruins: 'rubble',
+    forest: 'grass', field: 'grass', mountains: 'grass', parliament: 'grass', desert: 'sand', sea: 'sand', stadium: 'pitch', stage: 'planks', space: 'moon' };
+
+  /* ------------------------------------------------------------ sports : un décor et un jeu de scène par discipline */
+  const TEAM = [['#d62828', '#ffffff'], ['#1d4ed8', '#ffd23f'], ['#111111', '#f5f5f5'], ['#16a34a', '#ffffff']];
+  function player(s, x, y, i, f, walking, facing, costume = 'athlete') {
+    drawPerson(s.p, x, y, costume, { skin: SKIN[(i * 2 + 1) % SKIN.length], hair: HAIR[i % HAIR.length], shirt: TEAM[i % 2][0], phase: i * 3 }, f, walking, facing);
+  }
+  function arc(t, x0, x1, y0, hgt) { return [x0 + (x1 - x0) * t, y0 - Math.sin(t * Math.PI) * hgt]; }
+  const SPORT_SCENES = {
+    football: {
+      bg(s) { BACKDROPS.stadium(s); const { p, W, G } = s; p(W - 12, G - 14, '#ffffff', 1, 14); p(W - 4, G - 14, '#ffffff', 1, 14); p(W - 12, G - 14, '#ffffff', 9, 1); for (let y = G - 13; y < G; y += 2) p(W - 11, y, 'rgba(255,255,255,.35)', 7, 1); },
+      ground: '#3f9b4a', time: 'day',
+      live(s, f) {
+        LIVE.stadium(s, f);
+        const { p, W, G } = s, t = (f % 20) / 20, [bx, by] = arc(t, W * 0.32, W - 9, G - 3, 9);
+        player(s, Math.round(W * 0.2), G - 12, 0, f, true, 1); player(s, Math.round(W * 0.5), G - 12, 1, f, true, 1); player(s, W - 18, G - 12 - (t > 0.7 ? 2 : 0), 1, f, false, -1);
+        p(bx, by, '#ffffff', 2, 2);
+        if (t > 0.85) s.p.text('BUT', W - 26, G - 26, '#ffd23f');
+      },
+    },
+    tennis: {
+      bg(s) { const { p, W, G } = s; p(0, G - 6, '#2f5d8c', W, 6); p((W / 2) | 0, G - 9, '#dddddd', 1, 9); for (let y = G - 8; y < G; y += 2) p((W / 2) - 1 | 0, y, 'rgba(255,255,255,.5)', 3, 1); },
+      ground: '#3f7fbf', time: 'day',
+      live(s, f) {
+        const { p, W, G } = s, t = (f % 16) / 16, dir = ((f / 16) | 0) % 2, [bx, by] = arc(t, dir ? W - 20 : 20, dir ? 20 : W - 20, G - 10, 16);
+        player(s, 12, G - 12, 0, f, false, 1); player(s, W - 19, G - 12, 1, f, false, -1);
+        p(19, G - 9, '#d9d9d9', 1, 4); p(W - 21, G - 9, '#d9d9d9', 1, 4);
+        p(bx, by, '#d9f99d', 2, 2); p(0, G + 6, '#ffffff', W, 1);
+      },
+    },
+    rugby: {
+      bg(s) { BACKDROPS.stadium(s); const { p, W, G } = s; p(W - 14, G - 26, '#ffffff', 1, 26); p(W - 6, G - 26, '#ffffff', 1, 26); p(W - 14, G - 12, '#ffffff', 9, 1); },
+      ground: '#3f9b4a', time: 'day',
+      live(s, f) {
+        LIVE.stadium(s, f);
+        const { p, W, G } = s, t = (f % 12) / 12, k = ((f / 12) | 0) % 3, xs = [W * 0.15, W * 0.35, W * 0.55];
+        xs.forEach((x, i) => player(s, Math.round(x + (f % 30) * 0.4), G - 12, i === 1 ? 1 : 0, f, true, 1));
+        const [bx, by] = arc(t, xs[k] + 6 + (f % 30) * 0.4, xs[(k + 1) % 3] + 6 + (f % 30) * 0.4, G - 8, 5);
+        p(bx, by, '#8b5a2b', 3, 2);
+      },
+    },
+    basket: {
+      bg(s) {
+        const { p, W, G } = s; p(0, 0, '#2c2440', W, G);
+        for (let y = 6; y < G - 10; y += 4) for (let x = (y * 3) % 6; x < W; x += 6) p(x, y, SHIRT[(x + y) % SHIRT.length]);
+        p(W - 10, G - 36, '#f5f5f5', 8, 7); p(W - 14, G - 30, '#ff7a1a', 6, 1); for (let k = 0; k < 3; k++) p(W - 14 + k, G - 29 + k, '#dddddd', 6 - k * 2, 1); p(W - 4, G - 29, '#777', 2, 29);
+      },
+      ground: '#c8874a', time: 'night',
+      live(s, f) {
+        const { p, W, G } = s, c = f % 24;
+        player(s, Math.round(W * 0.3), G - 12, 0, f, c < 12, 1); player(s, Math.round(W * 0.55), G - 12, 1, f, false, -1);
+        let bx, by;
+        if (c < 12) { bx = W * 0.3 + 7; by = G - 5 - Math.abs(Math.sin(c * 0.8)) * 5; }
+        else [bx, by] = arc((c - 12) / 12, W * 0.3 + 7, W - 12, G - 16, 22);
+        p(bx, by, '#e67e22', 3, 3);
+      },
+    },
+    f1: {
+      bg(s) { const { p, W, G } = s; for (let k = 0; k < 3; k++) p(0, G - 20 + k * 6, k % 2 ? '#3a3f55' : '#2f3346', W, 6); },
+      ground: '#4a4d55', time: 'day',
+      live(s, f) {
+        LIVE.stadium({ ...s, G: s.G + 2 }, f);
+        const { p, W, G } = s;
+        for (let x = 0; x < W; x += 4) p(x, G, ((x / 4) | 0) % 2 ? '#e53935' : '#ffffff', 4, 2);
+        [['#d62828', 4, 6], ['#1d4ed8', 3.2, 12], ['#16a34a', 2.6, 18]].forEach(([c, v, y]) => {
+          const x = ((f * v + y * 9) % (W + 40)) - 22;
+          p(x, G + y - 2, c, 16, 3); p(x + 5, G + y - 4, c, 6, 2); p(x + 6, G + y - 4, '#9ad1ff', 3, 1);
+          p(x + 2, G + y + 1, '#111', 3, 2); p(x + 11, G + y + 1, '#111', 3, 2); p(x - 6, G + y - 1, 'rgba(255,255,255,.4)', 5, 1);
+        });
+      },
+    },
+    cyclisme: {
+      bg(s) { BACKDROPS.mountains(s); },
+      ground: '#5a5e68', time: 'sunset',
+      live(s, f) {
+        const { p, W, G } = s;
+        for (let k = 0; k < 3; k++) {
+          const x = (((f * 0.9 + k * 22) % (W + 30)) - 15) | 0, y = G - 10;
+          const spoke = f % 2;
+          [x, x + 9].forEach((wx) => { p(wx - 2, y + 4, '#222', 5, 1); p(wx - 2, y + 8, '#222', 5, 1); p(wx - 3, y + 5, '#222', 1, 3); p(wx + 3, y + 5, '#222', 1, 3); p(wx + (spoke ? -1 : 1), y + 6, '#888', 1, 1); });
+          p(x, y + 5, TEAM[k % 4][0], 9, 1); p(x + 3, y, TEAM[k % 4][0], 4, 5); disc(p, x + 6, y - 2, 1, SKIN[k]); p(x + 5, y - 4, '#ffd23f', 3, 1);
+        }
+      },
+    },
+    voile: {
+      bg(s) { BACKDROPS.sea(s); },
+      ground: '#2f6fb0', time: 'sunset',
+      live(s, f) {
+        LIVE.sea(s, f);
+        const { p, W, G } = s;
+        [[0.2, '#ffffff', 0.25], [0.55, '#ffd23f', 0.18], [0.8, '#ff6f61', 0.3]].forEach(([fx, sail, v], k) => {
+          const x = ((W * fx + f * v) % (W + 20)) - 10, y = G - 4 + ((f + k * 3) % 8 < 4 ? 0 : 1);
+          p(x, y, '#5b3a1e', 12, 2); p(x + 5, y - 13, '#555', 1, 13);
+          for (let j = 0; j < 11; j++) p(x + 6, y - 12 + j, sail, Math.min(6, j), 1);
+        });
+      },
+    },
+    natation: {
+      bg(s) { const { p, W, G } = s; p(0, 0, '#d9eef7', W, G); for (let y = 4; y < G; y += 5) p(0, y, '#bfe0ee', W, 1); for (let x = 4; x < W; x += 5) p(x, 0, '#bfe0ee', 1, G); },
+      ground: '#3aa0d8', time: 'day',
+      live(s, f) {
+        const { p, W, G, H } = s;
+        for (let y = G + 6; y < H; y += 10) for (let x = 0; x < W; x += 3) p(x, y, x % 6 ? '#ffffff' : '#e53935', 2, 1);
+        for (let k = 0; k < 3; k++) {
+          const y = G + 1 + k * 10, x = (((f * (1.1 + k * 0.2)) % (W + 20)) - 10) | 0;
+          disc(p, x, y, 2, SKIN[k]); p(x - 1, y - 2, ['#d62828', '#1d4ed8', '#ffd23f'][k], 3, 1);
+          const arm = f % 4 < 2; p(x + (arm ? 3 : -4), y - (arm ? 2 : 0), SKIN[k], 2, 1); p(x - 6, y, 'rgba(255,255,255,.8)', 4, 1);
+        }
+      },
+    },
+    athletisme: {
+      bg(s) { BACKDROPS.stadium(s); },
+      ground: '#c0533a', time: 'day',
+      live(s, f) {
+        LIVE.stadium(s, f);
+        const { p, W, G, H } = s;
+        for (let y = G + 4; y < H; y += 6) p(0, y, '#f5f5f5', W, 1);
+        p(W - 10, G, '#f5f5f5', 2, H - G);
+        for (let k = 0; k < 3; k++) player(s, (((f * (2 + k * 0.4)) % (W + 20)) - 10) | 0, G - 12 + k * 3, k, f * 2, true, 1);
+      },
+    },
+    combat: {
+      bg(s) { const { p, W, G } = s; p(0, 0, '#141018', W, G); for (let k = 0; k < 3; k++) disc(p, W * (0.2 + k * 0.3), 6, 3, '#fffbe0'); },
+      ground: '#2d5c9c', time: 'night',
+      live(s, f) {
+        const { p, W, G } = s, hit = f % 8 < 3;
+        player(s, Math.round(W * 0.38), G - 12, 0, f, false, 1); player(s, Math.round(W * 0.52), G - 12, 1, f, false, -1);
+        p(Math.round(W * 0.38) + (hit ? 9 : 7), G - 7, '#d62828', 2, 2); p(Math.round(W * 0.52) - 2, G - 7, '#1d4ed8', 2, 2);
+        if (hit) { p(Math.round(W * 0.5), G - 10, '#ffd23f', 1, 3); p(Math.round(W * 0.5) - 1, G - 9, '#ffd23f', 3, 1); }
+        ['#e53935', '#ffffff', '#3b82f6'].forEach((c, k) => p(0, G - 14 + k * 4, c, W, 1));
+        p(2, G - 16, '#999', 2, 16); p(W - 4, G - 16, '#999', 2, 16);
+      },
+    },
+    ski: {
+      bg(s) { const { p, W, G } = s; for (let j = 0; j < 26; j++) p(W * 0.5 - j * 2, G - 26 + j, '#e8eef5', 4 + j * 4, 1); p(W * 0.5 - 3, G - 26, '#ffffff', 7, 3); },
+      ground: '#f4f7fb', time: 'day',
+      live(s, f) {
+        const { p, W, G, H } = s, rr = s.rr(31);
+        for (let k = 0; k < 6; k++) pine(p, (rr() * W) | 0, G + 8 + ((rr() * (H - G - 12)) | 0), 9, '#2f5d3a', '#4a3423', 0);
+        const t = (f % 40) / 40, x = W * 0.15 + t * W * 0.7 + Math.sin(t * 12) * 6, y = G - 10 + t * (H - G - 10) * 0.6;
+        player(s, x | 0, y | 0, 0, f, false, Math.cos(t * 12) > 0 ? 1 : -1);
+        p((x | 0) - 2, (y | 0) + 12, '#555', 11, 1); p((x | 0) - 4, (y | 0) + 11, 'rgba(255,255,255,.9)', 3, 2);
+        for (let k = 0; k < 14; k++) p((rr() * W + f * 0.3) % W, (rr() * H + f) % H, '#ffffff');
+      },
+    },
+    golf: {
+      bg(s) { BACKDROPS.field(s); const { p, W, G } = s; p(W - 16, G - 18, '#eeeeee', 1, 18); p(W - 15, G - 18, '#e53935', 6, 4); },
+      ground: '#6fbf4a', time: 'sunset',
+      live(s, f) {
+        const { p, W, G } = s, c = f % 30, swing = c < 6;
+        player(s, 10, G - 12, 0, f, false, 1);
+        p(17, swing ? G - 11 : G - 6, '#cccccc', 1, swing ? 6 : 6);
+        const t = Math.max(0, (c - 6) / 24), [bx, by] = arc(Math.min(1, t * 1.4), 20, W - 16, G - 2, 18);
+        p(bx, Math.min(by, G - 2), '#ffffff', 2, 2); disc(p, W - 16, G, 2, '#1a1a1a');
+      },
+    },
+  };
+
   /* ------------------------------------------------------------ mise en scène */
   const DEFAULT_TIME = { space: 'night', night: 'night', stage: 'night', ruins: 'dusk' };
+  BACKDROPS.capital = (s) => {
+    const { p, W, G, pal, r } = s;
+    ridge(p, W, G - 26, G - 10, pal.far, r, 5, G);
+    s.flagTop = landmark(s, s.spec.country || 'fr', (W / 2) | 0, G, false);
+    p(0, G - 4, pal.mid, W, 4);
+  };
+  function miniFlag(p, code, x, y) {
+    const def = FLAGS[code];
+    if (!def) return;
+    const [kind, a, b, c] = def;
+    if (kind === 'v') { p(x, y, a, 2, 5); p(x + 2, y, b, 2, 5); p(x + 4, y, c || a, 2, 5); }
+    else if (kind === 'h') { p(x, y, a, 6, 2); p(x + 0, y + 2, b || a, 6, 2); p(x, y + 4, c || b || a, 6, 1); }
+    else if (kind === 'dot') { p(x, y, a, 6, 5); p(x + 2, y + 1, b, 2, 3); }
+    else if (kind === 'us') { p(x, y, '#b22234', 6, 5); p(x, y + 1, '#fff', 6, 1); p(x, y + 3, '#fff', 6, 1); p(x, y, '#3c3b6e', 3, 3); }
+    else if (kind === 'eu' || kind === 'nato') { p(x, y, kind === 'eu' ? '#003399' : '#004990', 6, 5); p(x + 2, y + 2, kind === 'eu' ? '#ffcc00' : '#fff', 2, 1); }
+    else if (kind === 'br') { p(x, y, '#009c3b', 6, 5); p(x + 1, y + 1, '#ffdf00', 4, 3); p(x + 2, y + 2, '#002776', 2, 1); }
+    else { p(x, y, a, 6, 5); p(x + 2, y, b, 2, 5); p(x, y + 2, b, 6, 1); }
+  }
+  function nameTag(s, text, cx, y, dark) {
+    const t = strip(text).slice(0, 10), tw = textWidth(t), x = Math.round(cx - tw / 2);
+    s.p(x - 2, y - 1, dark ? 'rgba(10,10,20,.82)' : 'rgba(255,255,255,.9)', tw + 4, 7);
+    s.p.text(t, x, y, dark ? '#ffffff' : '#14141f');
+  }
+
   function build(canvas, spec, seedText, opts = {}) {
     const W = opts.width || 96;
     const H = Math.max(48, Math.round(W * (canvas.clientHeight || 1) / (canvas.clientWidth || 1)) || Math.round(W * 1.6));
@@ -533,58 +924,72 @@ const Pixel = (() => {
     const ctx = canvas.getContext('2d');
     ctx.imageSmoothingEnabled = false;
     const seed = hash(seedText || 'actu');
-    const time = spec.time || DEFAULT_TIME[spec.bg] || 'day';
+    const sport = spec.sport && SPORT_SCENES[spec.sport];
+    const time = (sport && sport.time) || spec.time || DEFAULT_TIME[spec.bg] || 'day';
     const pal = SKIES[time] || SKIES.day;
     const G = Math.round(H * (opts.ground || 0.72));
     const s = { ctx, p: painter(ctx), W, H, G, pal, spec, time, rr: (k) => rng(seed + k * 7919), r: rng(seed) };
-    // couche fixe : ciel tramé, astre, décor lointain, sol
+    // couche fixe : ciel tramé, astre, décor lointain, monument, sol et premier plan jusqu'en bas
     const bgCanvas = document.createElement('canvas');
     bgCanvas.width = W; bgCanvas.height = H;
     const bctx = bgCanvas.getContext('2d');
     const sb = { ...s, ctx: bctx, p: painter(bctx), r: rng(seed) };
     sky(sb.p, W, H, pal, G);
     if (spec.bg !== 'space' && spec.bg !== 'stage') {
-      const sunX = Math.round(W * (0.25 + sb.r() * 0.5)), sunY = Math.round(G * (time === 'sunset' || time === 'dusk' ? 0.62 : 0.28)), R = time === 'night' ? 5 : 9;
+      const sunX = Math.round(W * (0.2 + sb.r() * 0.6)), sunY = Math.round(G * (time === 'sunset' || time === 'dusk' ? 0.6 : 0.26)), R = time === 'night' ? 5 : 9;
       disc(sb.p, sunX, sunY, R, pal.sun);
       if (time === 'night') disc(sb.p, sunX + 2, sunY - 1, R - 1, pal.sky[1]); // croissant de lune
     } else if (spec.bg === 'stage') sb.p(0, 0, '#120c18', W, G);
     if (time === 'night' && spec.bg !== 'space' && spec.bg !== 'stage') stars(sb.p, W, G - 20, rng(seed + 3), 0, 18);
-    (BACKDROPS[spec.bg] || BACKDROPS.mountains)(sb);
-    const ground = GROUND[spec.bg] || pal.ground;
+    if (sport) sport.bg(sb);
+    else {
+      if (spec.bg === 'ruins' && spec.country) landmark(sb, spec.country, Math.round(W * 0.62), G - 2, true);
+      (BACKDROPS[spec.bg] || BACKDROPS.mountains)(sb);
+    }
+    const ground = (sport && sport.ground) || GROUND[spec.bg] || pal.ground;
     sb.p(0, G, ground, W, H - G);
-    for (let y = G + 2; y < H; y += 3) for (let x = (y * 3) % 5; x < W; x += 5) sb.p(x, y, 'rgba(0,0,0,.12)');
+    for (let y = G + 2; y < H; y += 3) for (let x = (y * 3) % 5; x < W; x += 5) sb.p(x, y, 'rgba(0,0,0,.10)');
+    const fg = FOREGROUND[sport ? (spec.sport === 'natation' || spec.sport === 'voile' ? '' : 'pitch') : FG_OF[spec.bg]];
+    if (fg && H - G > 12) fg(sb);
     s.flagTop = sb.flagTop; s.crossAt = sb.crossAt;
 
     // personnages : alignés au sol, le premier change de costume (tenue de ville → tenue du sujet)
-    const cast = (spec.cast && spec.cast.length ? spec.cast : ['citizen']).slice(0, 3);
+    const cast = sport ? [] : (spec.cast && spec.cast.length ? spec.cast : ['citizen']).slice(0, 3);
     const r = rng(seed + 99);
     const people = cast.map((costume, i) => ({
       costume,
       look: { skin: SKIN[(r() * SKIN.length) | 0], hair: HAIR[(r() * HAIR.length) | 0], shirt: SHIRT[(r() * SHIRT.length) | 0], phase: i * 3 + ((r() * 5) | 0) },
       x: Math.round(W * (cast.length === 1 ? 0.36 : 0.18 + i * (0.42 / Math.max(1, cast.length - 1)))),
-      walk: ['protester', 'model', 'citizen', 'student'].includes(costume) && cast.length > 1,
+      walk: ['protester', 'model', 'citizen', 'student'].includes(costume) && cast.length > 1 && !opts.still,
+      tag: (spec.tags || [])[i],
     }));
-    if (spec.prop === 'handshake' && people.length >= 2) { people[0].x = ((W / 2) | 0) - 9; people[1].x = ((W / 2) | 0) + 2; people[1].face = -1; }
+    if ((spec.prop === 'handshake' || opts.facing) && people.length >= 2) { people[0].x = ((W / 2) | 0) - 10; people[1].x = ((W / 2) | 0) + 3; people[1].face = -1; }
     const labels = (spec.label || []).map(strip).filter(Boolean).slice(0, 2);
     const flags = (spec.flags || []).slice(0, 2);
-    const live = LIVE[spec.bg];
-    const prop = PROPS[spec.prop];
+    const live = sport ? sport.live : LIVE[spec.bg];
+    const prop = sport ? null : PROPS[spec.prop];
+    const flagMast = spec.bg === 'parliament' || spec.bg === 'capital';
 
     function draw(f) {
       ctx.drawImage(bgCanvas, 0, 0);
-      if (spec.bg !== 'space' && spec.bg !== 'stage' && time !== 'night') clouds(s.p, W, 6, f, rng(seed + 5), 'rgba(255,255,255,.85)');
+      if (spec.bg !== 'space' && spec.bg !== 'stage' && time !== 'night' && !(sport && sport.time === 'night')) clouds(s.p, W, 6, f, rng(seed + 5), 'rgba(255,255,255,.85)');
       if (live) live(s, f);
-      if (spec.bg === 'parliament' && s.flagTop) flag(s, flags[0] || 'eu', s.flagTop[0] - 1, s.flagTop[1] - 1, f);
-      flags.forEach((code, i) => { if (!(spec.bg === 'parliament' && i === 0)) flag(s, code, i ? W - 15 : 3, G - 18, f + i * 3); });
+      // en ville, le monument du pays se dresse devant les immeubles
+      if (!sport && (spec.bg === 'city' || spec.bg === 'night') && spec.country && W >= 80) landmark(s, spec.country, Math.round(W * 0.72), G, false);
+      if (flagMast && s.flagTop) flag(s, flags[0] || spec.country || 'eu', s.flagTop[0] - 1, s.flagTop[1] - 1, f);
+      flags.forEach((code, i) => { if (!(flagMast && s.flagTop && i === 0)) flag(s, code, i ? W - 15 : 3, G - 18, f + i * 3); });
       if (prop) prop(s, f);
       const cycle = f % 48; // 6 s : tenue de ville, petit nuage magique, puis costume du sujet
       people.forEach((pp, i) => {
         let costume = pp.costume;
-        if (i === 0 && costume !== 'citizen' && cycle < 8) costume = 'citizen';
+        const change = i === 0 && costume !== 'citizen' && !opts.still;
+        if (change && cycle < 8) costume = 'citizen';
         let x = pp.x;
         if (pp.walk) x += Math.round(Math.sin((f + pp.look.phase * 4) * 0.12) * 5);
+        pp.cx = x + 3;
         drawPerson(s.p, x, G - 12, costume, pp.look, f, pp.walk, pp.face || (i % 2 && people.length > 2 ? -1 : 1));
-        if (i === 0 && pp.costume !== 'citizen' && cycle >= 7 && cycle < 11) {
+        if (pp.tag) nameTag(s, pp.tag, x + 3, G - 21, true);
+        if (change && cycle >= 7 && cycle < 11) {
           for (let k = 0; k < 7; k++) s.p(x - 2 + ((k * 5 + cycle * 3) % 11), G - 15 + ((k * 7 + cycle) % 15), k % 2 ? '#ffffff' : '#ffe680');
         }
       });
@@ -595,18 +1000,166 @@ const Pixel = (() => {
         s.p.text(t, x, y, i ? '#14141f' : '#ffffff');
       });
     }
-    return { draw };
+    return { draw, s, people };
+  }
+
+  /* ------------------------------------------------------------ « En un coup d'œil » : vidéo schématique en 5 étapes */
+  const STEP_FRAMES = 44; // ≈ 5,5 s par étape
+  const STEPS = [['ou', 'OÙ ?'], ['qui', 'QUI ?'], ['quoi', 'QUOI ?'], ['liens', 'LIENS'], ['consequences', 'ET APRÈS ?']];
+  const ACTION_PROP = { vote: 'ballot', victoire: 'trophy', arrete: 'siren', juge: 'gavel', lance: 'rocket', hausse: 'chart', baisse: 'chart', accident: 'fire', annonce: 'podium', signe: 'podium' };
+  const NATURE_COLOR = { allie: '#4ade80', oppose: '#f87171', negocie: '#facc15', depend: '#cbd5e1', aide: '#60a5fa', accuse: '#fb923c' };
+  const CONS_LABEL = { hausse: 'HAUSSE', baisse: 'BAISSE', alerte: 'ALERTE', election: 'VOTE', loi: 'LOI', argent: 'ARGENT', sante: 'SANTE', guerre: 'GUERRE', paix: 'PAIX', justice: 'JUSTICE', climat: 'CLIMAT', emploi: 'EMPLOI', autre: 'A SUIVRE' };
+  const COUNTRY_NAME = { fr: 'FRANCE', us: 'USA', gb: 'ROYAUME-UNI', de: 'ALLEMAGNE', ru: 'RUSSIE', ua: 'UKRAINE', cn: 'CHINE', tw: 'TAIWAN', it: 'ITALIE', es: 'ESPAGNE',
+    be: 'BELGIQUE', eu: 'UE', br: 'BRESIL', ar: 'ARGENTINE', mx: 'MEXIQUE', jp: 'JAPON', in: 'INDE', il: 'ISRAEL', ps: 'PALESTINE', ir: 'IRAN', sy: 'SYRIE',
+    tr: 'TURQUIE', lb: 'LIBAN', co: 'COLOMBIE', ve: 'VENEZUELA', cl: 'CHILI', pe: 'PEROU', cu: 'CUBA', ec: 'EQUATEUR', uy: 'URUGUAY', ca: 'CANADA', pl: 'POLOGNE',
+    bg: 'BULGARIE', se: 'SUEDE', nl: 'PAYS-BAS', ie: 'IRLANDE', latam: 'AMERIQUE LATINE', nato: 'OTAN' };
+
+  function blueprint(s, title) {
+    const { p, W, H } = s;
+    p(0, 0, '#0f2240', W, H);
+    for (let x = 0; x < W; x += 8) p(x, 0, '#16305a', 1, H);
+    for (let y = 0; y < H; y += 8) p(0, y, '#16305a', W, 1);
+    p(2, 2, 'rgba(10,20,40,.8)', textWidth(strip(title)) + 4, 8); p.text(strip(title), 4, 3, '#9cc7ff');
+  }
+  function dashLine(p, x0, y0, x1, y1, c, phase) {
+    const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)) | 0;
+    for (let i = 0; i <= n; i++) if (((i + phase) >> 1) % 3 !== 0) p(Math.round(x0 + ((x1 - x0) * i) / n), Math.round(y0 + ((y1 - y0) * i) / n), c);
+    const ang = Math.atan2(y1 - y0, x1 - x0);
+    for (let k = 1; k <= 3; k++) {
+      p(Math.round(x1 - Math.cos(ang - 0.6) * k), Math.round(y1 - Math.sin(ang - 0.6) * k), c);
+      p(Math.round(x1 - Math.cos(ang + 0.6) * k), Math.round(y1 - Math.sin(ang + 0.6) * k), c);
+    }
+  }
+  function pictogram(p, kind, x, y, f) {
+    const blink = f % 10 < 6;
+    switch (kind) {
+      case 'hausse': for (let j = 0; j < 7; j++) p(x + 7 - j, y + j, '#22c55e', j * 2 + 1, 1); p(x + 5, y + 7, '#22c55e', 5, 7); break;
+      case 'baisse': p(x + 5, y, '#ef4444', 5, 7); for (let j = 0; j < 7; j++) p(x + 1 + j, y + 7 + j, '#ef4444', 13 - j * 2, 1); break;
+      case 'alerte': for (let j = 0; j < 12; j++) p(x + 7 - (j >> 1), y + j, '#facc15', (j >> 1) * 2 + 1, 1); if (blink) { p(x + 7, y + 4, '#111', 1, 4); p(x + 7, y + 9, '#111', 1, 1); } break;
+      case 'election': p(x + 1, y + 6, '#e8eef5', 13, 8); p(x + 4, y + 6, '#333', 7, 1); p(x + 5, y + (f % 8), '#fff', 5, 4); break;
+      case 'loi': p(x + 2, y, '#f5e6c4', 11, 14); for (let k = 0; k < 4; k++) p(x + 4, y + 3 + k * 3, '#8b6b3a', 7, 1); p(x + 9, y + 11, '#c0392b', 3, 3); break;
+      case 'argent': for (let k = 0; k < 4; k++) { p(x + 2, y + 12 - k * 2, '#f1c40f', 10, 1); p(x + 2, y + 13 - k * 2, '#c99a06', 10, 1); } if (blink) p(x + 12, y + 1, '#fff', 1, 1); break;
+      case 'sante': p(x + 5, y + 1, '#e53935', 4, 12); p(x + 1, y + 5, '#e53935', 12, 4); break;
+      case 'guerre': for (let k = 0; k < 8; k++) { const a = (k / 8) * Math.PI * 2 + f * 0.1; p(Math.round(x + 7 + Math.cos(a) * 6), Math.round(y + 7 + Math.sin(a) * 6), '#ff8c1a', 2, 2); } disc(p, x + 7, y + 7, 3, '#ffd23f'); break;
+      case 'paix': p(x + 2, y + 6, '#fff', 9, 3); p(x + 10, y + 5, '#fff', 3, 2); p(x + 4, blink ? y + 3 : y + 9, '#fff', 4, 2); p(x + 12, y + 6, '#f59e0b', 2, 1); break;
+      case 'justice': p(x + 7, y + 1, '#d4a017', 1, 12); p(x + 1, y + 3, '#d4a017', 13, 1); p(x, y + 7, '#d4a017', 5, 1); p(x + 10, y + 7, '#d4a017', 5, 1); p(x + 4, y + 13, '#d4a017', 7, 1); break;
+      case 'climat': p(x + 6, y, '#e5e7eb', 3, 11); disc(p, x + 7, y + 12, 2, '#ef4444'); p(x + 7, y + 4 + (blink ? 0 : 2), '#ef4444', 1, 8); break;
+      case 'emploi': p(x + 1, y + 4, '#7a5230', 13, 9); p(x + 5, y + 2, '#3a2a1a', 5, 2); p(x + 1, y + 7, '#5b3a1e', 13, 1); break;
+      default: p(x + 4, y + 1, '#e5e7eb', 6, 2); p(x + 9, y + 3, '#e5e7eb', 2, 3); p(x + 6, y + 6, '#e5e7eb', 3, 3); if (blink) p(x + 6, y + 11, '#e5e7eb', 3, 2);
+    }
+  }
+  function storyPlayer(canvas, story, spec, seedText, onStep) {
+    const steps = STEPS.filter(([k]) => k !== 'liens' || (story.links || []).length);
+    const actors = (story.actors || []).slice(0, 4);
+    let local = 0, cur = -1, sub = null, paused = false;
+    const W = 128;
+    function enter(i) {
+      cur = i;
+      const key = steps[i][0], seed = seedText + ':' + key;
+      const place = story.place || {};
+      if (key === 'ou') {
+        const country = place.country && place.country !== 'monde' ? place.country : spec.country;
+        sub = build(canvas, { bg: country ? 'capital' : 'mountains', country, time: spec.time === 'night' ? 'dusk' : 'sunset', cast: [], flags: country ? [country] : [],
+          label: [place.city || COUNTRY_NAME[country] || 'MONDE'] }, seed, { width: W, ground: 0.8, labelY: 0.08 });
+      } else if (key === 'quoi') {
+        const a = story.action || {}, kind = a.kind || 'annonce';
+        const who = [actors[a.who] || actors[0], actors[a.target]].filter(Boolean);
+        const cast = kind === 'manifeste' ? ['protester', 'protester', 'protester'] : who.map((x) => x.role || 'citizen');
+        sub = build(canvas, { ...spec, sport: kind === 'victoire' ? undefined : spec.sport, cast: cast.length ? cast : spec.cast, tags: kind === 'manifeste' ? [] : who.map((x) => x.tag),
+          prop: ACTION_PROP[kind] || (spec.bg === 'ruins' ? 'tank' : null), dir: kind === 'baisse' ? 'down' : 'up', label: [a.verb || 'ACTION'],
+          flags: who.map((x) => x.country).filter((c) => FLAGS[c]) }, seed, { width: W, ground: 0.8, labelY: 0.08, still: true, facing: ['negocie', 'aide', 'attaque', 'signe'].includes(kind) });
+        sub.kind = kind;
+      } else {
+        const fake = { width: W };
+        canvas.width = W; canvas.height = Math.max(48, Math.round(W * (canvas.clientHeight || 80) / (canvas.clientWidth || 128)));
+        const ctx = canvas.getContext('2d');
+        sub = { s: { ctx, p: painter(ctx), W, H: canvas.height, G: Math.round(canvas.height * 0.72) }, key, opts: fake };
+      }
+      onStep?.(i, key, steps[i][1]);
+    }
+    function drawSchema(f, key) {
+      const { s } = sub, { p, W: w, H } = s;
+      if (key === 'qui') {
+        blueprint(s, 'LES ACTEURS');
+        const n = Math.max(1, actors.length), base = H - 14;
+        p(0, base + 12, '#9cc7ff', w, 1);
+        actors.forEach((a, i) => {
+          const target = Math.round((w * (i + 0.5)) / n) - 3, x = Math.round(Math.min(target, -10 + (f - i * 4) * 3));
+          drawPerson(p, x, base, a.role || 'citizen', { skin: SKIN[i % SKIN.length], hair: HAIR[(i * 2) % HAIR.length], shirt: SHIRT[i % SHIRT.length], phase: i * 2 }, f, x < target, 1);
+          if (x >= target - 1) { nameTag(s, a.tag || a.name, x + 3, base - 10, false); miniFlag(p, a.country, x, base + 14); }
+        });
+      } else if (key === 'liens') {
+        blueprint(s, 'LIENS');
+        const n = actors.length, cx = w / 2, cy = H / 2 + 4, rx = w * 0.34, ry = H * 0.28;
+        const pos = actors.map((a, i) => { const ang = -Math.PI / 2 + (i / Math.max(1, n)) * Math.PI * 2 + (n === 2 ? Math.PI / 2 : 0); return [Math.round(cx + Math.cos(ang) * rx), Math.round(cy + Math.sin(ang) * ry)]; });
+        (story.links || []).forEach((l, k) => {
+          const a = pos[l.from], b = pos[l.to];
+          if (!a || !b || l.from === l.to) return;
+          const c = NATURE_COLOR[l.nature] || '#e5e7eb', dx = b[0] - a[0], dy = b[1] - a[1], len = Math.hypot(dx, dy) || 1, off = 9;
+          dashLine(p, a[0] + (dx / len) * off, a[1] + (dy / len) * off, b[0] - (dx / len) * off, b[1] - (dy / len) * off, c, f + k * 3);
+          const label = strip(l.rel).slice(0, 10), tw = textWidth(label), mx = Math.round((a[0] + b[0]) / 2 - tw / 2), my = Math.round((a[1] + b[1]) / 2 - 3 + (k % 2 ? 6 : -6));
+          p(mx - 2, my - 1, 'rgba(10,20,40,.9)', tw + 4, 7); p.text(label, mx, my, c);
+        });
+        actors.forEach((a, i) => {
+          const [x, y] = pos[i];
+          drawPerson(p, x - 3, y - 6, a.role || 'citizen', { skin: SKIN[i % SKIN.length], hair: HAIR[(i * 2) % HAIR.length], shirt: SHIRT[i % SHIRT.length], phase: i }, f, false, 1);
+          nameTag(s, a.tag || a.name, x, y + 8, false);
+        });
+      } else if (key === 'consequences') {
+        blueprint(s, 'ET APRES ?');
+        const list = (story.consequences || []).slice(0, 3), n = Math.max(1, list.length);
+        list.forEach((c, i) => {
+          if (f < i * 10) return;
+          const x = Math.round((w * (i + 0.5)) / n) - 7, y = Math.round(H * 0.32);
+          pictogram(p, c.kind, x, y, f);
+          const t = CONS_LABEL[c.kind] || CONS_LABEL.autre, tw = textWidth(t);
+          p.text(t, x + 7 - Math.round(tw / 2), y + 20, '#e5e7eb');
+        });
+      }
+    }
+    function drawAction(f) {
+      const { s, people, kind } = sub, { p, G } = s;
+      const a = people[0], b = people[1];
+      if (!a) return;
+      const ax = a.cx, bx = b ? b.cx : ax + 30;
+      if (kind === 'attaque') { for (let k = 0; k < 3; k++) { const t = ((f + k * 5) % 15) / 15; p(Math.round(ax + (bx - ax) * t), Math.round(G - 14 - Math.sin(t * Math.PI) * 10), '#ffb347', 2, 1); } if (f % 15 > 12) disc(p, bx, G - 8, 4, '#ff8c1a'); }
+      else if (kind === 'negocie' || kind === 'autre') { const who = (f >> 3) % 2 && b ? bx : ax; p(who - 5, G - 34, '#fff', 11, 7); p(who - 1, G - 27, '#fff', 2, 2); for (let k = 0; k < 3; k++) if ((f >> 1) % 4 > k) p(who - 3 + k * 3, G - 31, '#333', 1, 1); }
+      else if (kind === 'annonce' || kind === 'avertit') { if (f % 12 < 8) { p(ax - 4, G - 34, kind === 'avertit' ? '#facc15' : '#fff', 9, 8); p(ax, G - 32, '#e53935', 1, 4); p(ax, G - 27, '#e53935', 1, 1); } }
+      else if (kind === 'victoire') { for (let k = 0; k < 14; k++) p((k * 11 + f * 2) % s.W, (k * 7 + f * 3) % (G - 4), SHIRT[k % SHIRT.length]); }
+      else if (kind === 'defaite') { p(ax - 6, G - 34, '#6b7280', 13, 5); for (let k = 0; k < 4; k++) p(ax - 5 + k * 3, G - 28 + ((f + k * 2) % 8), '#93c5fd', 1, 2); }
+      else if (kind === 'aide') { const t = (f % 16) / 16, x = Math.round(ax + (bx - ax) * t); p(x - 2, G - 22, '#ef4444', 2, 2); p(x + 1, G - 22, '#ef4444', 2, 2); p(x - 1, G - 21, '#ef4444', 3, 2); }
+      else if (kind === 'decouvre') { if (f % 8 < 5) { disc(p, ax, G - 30, 3, '#fde047'); p(ax - 1, G - 26, '#9ca3af', 3, 2); } }
+    }
+    return {
+      steps,
+      draw(f) {
+        if (cur < 0) enter(0);
+        const step = (local / STEP_FRAMES) | 0;
+        if (step !== cur) enter(step % steps.length);
+        if (step >= steps.length) local = 0;
+        const lf = local % STEP_FRAMES;
+        if (sub.draw) { sub.draw(lf); if (steps[cur][0] === 'quoi') drawAction(lf); }
+        else drawSchema(lf, sub.key);
+        if (!paused) local++;
+      },
+      go(i) { local = ((i + steps.length) % steps.length) * STEP_FRAMES; },
+      current: () => ((local / STEP_FRAMES) | 0) % steps.length, // position réelle, même entre deux images
+      toggle() { paused = !paused; return paused; },
+    };
   }
 
   /* ------------------------------------------------------------ boucle : seule la scène la plus visible s'anime */
-  const scenes = new Map(); // canvas → { scene, ratio }
+  const scenes = new Map(); // canvas → { spec, seed, opts, scene, ratio, story }
   let frame = 0, timer = null;
+  function make(canvas, item) {
+    return item.story ? storyPlayer(canvas, item.story, item.spec, item.seed, item.opts.onStep) : build(canvas, item.spec, item.seed, item.opts);
+  }
   const io = 'IntersectionObserver' in window ? new IntersectionObserver((entries) => {
     for (const e of entries) {
       const item = scenes.get(e.target);
       if (!item) continue;
       item.ratio = e.isIntersecting ? e.intersectionRatio : 0;
-      if (e.isIntersecting && !item.scene) item.scene = build(e.target, item.spec, item.seed, item.opts);
+      if (e.isIntersecting && !item.scene) item.scene = make(e.target, item);
       if (item.scene && e.isIntersecting) item.scene.draw(frame);
     }
     tick();
@@ -619,25 +1172,47 @@ const Pixel = (() => {
   }
   function step() {
     frame++;
-    let best = null;
-    for (const item of scenes.values()) if (item.scene && item.ratio > 0.2 && (!best || item.ratio > best.ratio)) best = item;
-    if (best) best.scene.draw(frame);
-    // les canevas retirés de la page sont oubliés
-    if (frame % 40 === 0) for (const c of scenes.keys()) if (!c.isConnected) { scenes.delete(c); io?.unobserve(c); }
+    let best = null, bestCanvas = null;
+    for (const [canvas, item] of scenes) {
+      if (!canvas.isConnected) { scenes.delete(canvas); io?.unobserve(canvas); continue; }
+      const score = item.ratio > 0.2 ? item.ratio + (item.story ? 10 : 0) : 0;
+      if (score && (!best || score > best.score)) { best = item; best.score = score; bestCanvas = canvas; }
+    }
+    if (best) { if (!best.scene) best.scene = make(bestCanvas, best); best.scene.draw(frame); }
+    else tick();
   }
   document.addEventListener('visibilitychange', tick);
+  // changement de taille ou d'orientation : les scènes se redessinent au nouveau format de l'écran
+  let resizeTimer;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => { for (const [canvas, item] of scenes) if (!item.story) { item.scene = null; if (item.ratio > 0) { item.scene = make(canvas, item); item.scene.draw(frame); } } }, 250);
+  });
 
-  function mount(canvas, spec, seed, opts) {
+  function mount(canvas, spec, seed, opts = {}) {
     if (!spec) return;
     scenes.set(canvas, { spec, seed, opts, scene: null, ratio: 0 });
     if (io) io.observe(canvas);
     else { const sc = build(canvas, spec, seed, opts); scenes.get(canvas).scene = sc; scenes.get(canvas).ratio = 1; sc.draw(0); tick(); }
   }
+  /** Vidéo « En un coup d'œil » ; renvoie des commandes (précédent, suivant, pause). */
+  function mountStory(canvas, story, spec, seed, onStep) {
+    const item = { spec, seed, opts: { onStep }, story, scene: null, ratio: 0 };
+    scenes.set(canvas, item);
+    if (io) io.observe(canvas);
+    const ensure = () => (item.scene ||= make(canvas, item));
+    return {
+      next() { const sc = ensure(); sc.go(sc.current() + 1); },
+      prev() { const sc = ensure(); sc.go(sc.current() - 1); },
+      toggle() { return ensure().toggle(); },
+      steps: () => ensure().steps,
+    };
+  }
 
   /* scène de secours pour les éditions préparées avant l'arrivée des scènes */
   const FROM_THEME = {
     geopolitique: { bg: 'ruins', cast: ['soldier', 'soldier'], prop: 'tank', label: ['MONDE'] },
-    politique: { bg: 'parliament', cast: ['politician', 'citizen'], prop: 'podium', label: ['POLITIQUE'] },
+    politique: { bg: 'capital', cast: ['politician', 'citizen'], prop: 'podium', label: ['POLITIQUE'] },
     economie: { bg: 'factory', cast: ['business', 'worker'], prop: 'chart', label: ['ECONOMIE'] },
     finance: { bg: 'city', cast: ['business', 'business'], prop: 'coins', label: ['FINANCE'] },
     sport: { bg: 'stadium', cast: ['athlete', 'athlete'], prop: 'ball', label: ['SPORT'] },
@@ -653,5 +1228,5 @@ const Pixel = (() => {
     return { ...(FROM_THEME[t] || { bg: 'city', cast: ['journalist', 'citizen'], prop: 'mic', label: ['INFO'] }), flags: [] };
   }
 
-  return { mount, fallback };
+  return { mount, mountStory, fallback, countryName: (c) => COUNTRY_NAME[c] };
 })();

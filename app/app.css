@@ -62,7 +62,15 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
 /* scène pixel art animée en fond (dessinée par pixel.js, pixels nets) */
 .slide .scene, .scene-box { image-rendering: -webkit-optimize-contrast; image-rendering: pixelated; image-rendering: crisp-edges; display: block; }
 .slide .scene { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -2; background: #111; }
-.slide .shade { position: absolute; inset: 0; z-index: -1; background: linear-gradient(180deg, rgba(0,0,0,.35) 0%, rgba(0,0,0,0) 14%, rgba(0,0,0,0) 47%, rgba(0,0,0,.8) 60%, #000 74%); }
+.slide .shade { position: absolute; inset: 0; z-index: -1; background: linear-gradient(180deg, rgba(0,0,0,.3) 0%, rgba(0,0,0,0) 12%, rgba(0,0,0,0) 50%, rgba(0,0,0,.45) 62%, rgba(0,0,0,.62) 100%); }
+/* plein écran : sur le fil, la scène passe sous la barre d'onglets, devenue transparente */
+body.on-feed #views { bottom: 0; }
+body.on-feed .tabbar { background: rgba(0, 0, 0, .3); border-top-color: rgba(255, 255, 255, .08); }
+body.on-feed .tabbar button { color: rgba(255, 255, 255, .7); }
+body.on-feed .tabbar button[aria-current="page"] { color: #fff; }
+.feed .slide-body { padding-bottom: calc(var(--tabbar) + var(--safe-bottom) + 18px); }
+.feed .rail { bottom: calc(var(--tabbar) + var(--safe-bottom) + 22px); }
+.feed .headline, .feed .dek, .feed .meta { text-shadow: 0 1px 2px rgba(0,0,0,.9), 0 0 14px rgba(0,0,0,.55); }
 .slide-top { position: absolute; top: calc(var(--safe-top) + 12px); left: 14px; right: 64px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .pill { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px; border-radius: 99px; background: rgba(0, 0, 0, .55); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); font-size: 12.5px; font-weight: 650; white-space: nowrap; }
 .pill.region { color: var(--ink, #000); background: var(--rc); }
@@ -136,7 +144,19 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
 .post .open { display: inline-flex; gap: 6px; align-items: center; margin-top: 10px; font-size: 13px; font-weight: 700; color: var(--muted); text-decoration: none; }
 .post .open svg { width: 15px; height: 15px; }
 .empty { padding: 30px 18px; text-align: center; color: var(--muted); line-height: 1.5; }
-.scene-box { width: 100%; aspect-ratio: 16 / 10; border-radius: 14px; background: #111; }
+.scene-box { width: 100%; aspect-ratio: 16 / 10; border-radius: 12px; background: #111; cursor: pointer; }
+.story { position: relative; border-radius: 16px; background: var(--surface-2); padding: 10px; }
+.story-bars { display: flex; gap: 4px; margin-bottom: 8px; }
+.story-bars i { flex: 1; height: 3px; border-radius: 2px; background: rgba(255,255,255,.2); overflow: hidden; position: relative; }
+.story-bars i.done { background: #fff; }
+.story-bars i.on::after { content: ""; position: absolute; inset: 0; background: #fff; transform-origin: left; animation: storybar 5.5s linear forwards; }
+.story.paused .story-bars i.on::after { animation-play-state: paused; }
+@keyframes storybar { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.story-cap { padding: 10px 4px 2px; min-height: 96px; }
+.story-step { display: inline-block; margin-bottom: 6px; padding: 2px 8px; border-radius: 6px; background: #fff; color: #000; font-size: 12px; font-weight: 800; letter-spacing: .06em; }
+.story-text { margin: 0; font-size: 15px; line-height: 1.5; color: #ebe7e3; }
+.story-nav { display: flex; justify-content: center; gap: 18px; }
+.story-nav .icon-btn { background: var(--surface-3); }
 .article-text { margin: 4px 0 22px; }
 .article-text p { margin: 0 0 1.05em; font-family: var(--serif); font-size: 18.5px; line-height: 1.62; color: #ebe7e3; }
 .article-text .small { font-family: var(--sans); font-size: 12.5px; }

@@ -13,7 +13,7 @@ TOPICS = [
      "frappe* airstrike* bombard* missile* misil* drone* nato invasion front combat* offensive* cessez_le_feu ceasefire alto_el_fuego "
      "char tank* artillerie* artillery", "ruins", ["soldier", "soldier"], "tank", "dusk", "GUERRE"),
     ("diplomatie", "sommet summit cumbre diplomat* negociation* negotiation* talks pourparlers accord deal treaty traite tratado "
-     "rencontre meeting reunion embassy ambassad* visite visit", "parliament", ["politician", "politician"], "handshake", "day", "DIPLOMATIE"),
+     "rencontre meet meets meeting reunion embassy ambassad* visite visit", "parliament", ["politician", "politician"], "handshake", "day", "DIPLOMATIE"),
     ("election", "election* eleccion* elector* electoral* vote votes voter* voto* scrutin* campagne campaign* campana primaire* primaries "
      "midterm* sondage* poll* encuesta* referendum* candidat* candidate* urnes ballot*", "parliament", ["politician", "citizen"], "ballot", "day", "ELECTIONS"),
     ("gouvernement", "gouvernement* government* gobierno* ministre* minister* ministro* parlement* parliament* assemblee senat* senate "
@@ -103,6 +103,47 @@ LABELS = {"usa": "USA", "uk": "ROYAUME-UNI", "eu": "UE", "nato": "OTAN", "aitech
           "putin": "POUTINE", "zelensky": "ZELENSKY", "beijing": "PEKIN", "brussels": "BRUXELLES", "london": "LONDRES"}
 UP = re.compile(r" (hausse|augment\w*|record\w*|bondit|bond|grimpe|progress\w*|rise\w*|rising|surge\w*|soar\w*|gain\w*|sube|suben|alza|crece\w*|growth|croissance) ")
 DOWN = re.compile(r" (baisse\w*|chute\w*|recul\w*|plonge\w*|effondr\w*|fall\w*|drop\w*|plunge\w*|slump\w*|decline\w*|crisis|crise|cae|caen|caida|baja|desplom\w*|recession) ")
+# sport précis → décor dédié dans l'application
+SPORTS = [
+    ("tennis", "tennis tenis atp wta roland_garros wimbledon us_open open_d_australie alcaraz sinner djokovic swiatek sabalenka gauff"),
+    ("rugby", "rugby top_14 xv_de_france six_nations tournoi_des_six_nations dupont stade_toulousain"),
+    ("basket", "nba basket basketball baloncesto euroleague wembanyama lebron curry"),
+    ("f1", "formule_1 formula_1 f1 grand_prix gran_premio verstappen hamilton leclerc antonelli norris piastri motogp"),
+    ("cyclisme", "cyclisme cycliste* cycling ciclismo tour_de_france giro vuelta pogacar vingegaard peloton"),
+    ("voile", "voile skipper* regate* vendee_globe route_du_rhum transat* course_au_large america_s_cup voilier*"),
+    ("natation", "natation swimming natacion nageu* swimmer* piscine marchand"),
+    ("athletisme", "athletisme athletics atletismo marathon maraton sprint* 100_m 200_m perche duplantis"),
+    ("combat", "boxe boxing boxeo boxeu* boxer* ufc mma judo judoka*"),
+    ("ski", "ski skieu* skier* biathlon snowboard slalom descente"),
+    ("golf", "golf golfeu* golfer* pga ryder_cup masters_d_augusta"),
+    ("football", "football foot soccer futbol* ligue_1 ligue_des_champions champions_league liga premier_league serie_a bundesliga "
+     "psg om real_madrid barca barcelona atletico boca river_plate mbappe messi ronaldo haaland mercato coupe_du_monde mundial "
+     "copa_libertadores but buts gol goles"),
+]
+_SPORT_RX = [(sid, compile_keywords(words.split())) for sid, words in SPORTS]
+# grandes villes → (nom affiché, pays du monument)
+CITIES = {
+    "paris": ("PARIS", "fr"), "marseille": ("MARSEILLE", "fr"), "lyon": ("LYON", "fr"), "toulouse": ("TOULOUSE", "fr"), "nice": ("NICE", "fr"),
+    "bordeaux": ("BORDEAUX", "fr"), "lille": ("LILLE", "fr"), "nantes": ("NANTES", "fr"), "strasbourg": ("STRASBOURG", "fr"),
+    "kyiv": ("KIEV", "ua"), "kharkiv": ("KHARKIV", "ua"), "kharkov": ("KHARKIV", "ua"), "odessa": ("ODESSA", "ua"), "odesa": ("ODESSA", "ua"),
+    "zaporijia": ("ZAPORIJIA", "ua"), "zaporizhzhia": ("ZAPORIJIA", "ua"), "dnipro": ("DNIPRO", "ua"), "lviv": ("LVIV", "ua"),
+    "kherson": ("KHERSON", "ua"), "donetsk": ("DONETSK", "ua"), "pokrovsk": ("POKROVSK", "ua"), "oleshky": ("OLECHKY", "ua"),
+    "moscow": ("MOSCOU", "ru"), "saint_petersbourg": ("ST-PETERSBOURG", "ru"), "koursk": ("KOURSK", "ru"), "kursk": ("KOURSK", "ru"),
+    "gaza": ("GAZA", "ps"), "rafah": ("RAFAH", "ps"), "khan_younes": ("KHAN YOUNES", "ps"), "cisjordanie": ("CISJORDANIE", "ps"),
+    "jerusalem": ("JERUSALEM", "il"), "tel_aviv": ("TEL AVIV", "il"), "beyrouth": ("BEYROUTH", "lb"), "beirut": ("BEYROUTH", "lb"),
+    "teheran": ("TEHERAN", "ir"), "tehran": ("TEHERAN", "ir"), "damas": ("DAMAS", "sy"), "damascus": ("DAMAS", "sy"),
+    "washington": ("WASHINGTON", "us"), "new_york": ("NEW YORK", "us"), "los_angeles": ("LOS ANGELES", "us"), "miami": ("MIAMI", "us"),
+    "chicago": ("CHICAGO", "us"), "london": ("LONDRES", "gb"), "berlin": ("BERLIN", "de"), "brussels": ("BRUXELLES", "eu"),
+    "madrid": ("MADRID", "es"), "barcelone": ("BARCELONE", "es"), "rome": ("ROME", "it"), "roma": ("ROME", "it"), "milan": ("MILAN", "it"),
+    "varsovie": ("VARSOVIE", "pl"), "warsaw": ("VARSOVIE", "pl"), "sofia": ("SOFIA", "bg"), "istanbul": ("ISTANBUL", "tr"), "ankara": ("ANKARA", "tr"),
+    "beijing": ("PEKIN", "cn"), "shanghai": ("SHANGHAI", "cn"), "hong_kong": ("HONG KONG", "cn"), "tokyo": ("TOKYO", "jp"),
+    "new_delhi": ("NEW DELHI", "in"), "taipei": ("TAIPEI", "tw"), "buenos_aires": ("BUENOS AIRES", "ar"), "caracas": ("CARACAS", "ve"),
+    "bogota": ("BOGOTA", "co"), "medellin": ("MEDELLIN", "co"), "cali": ("CALI", "co"), "lima": ("LIMA", "pe"), "santiago": ("SANTIAGO", "cl"),
+    "sao_paulo": ("SAO PAULO", "br"), "rio_de_janeiro": ("RIO", "br"), "brasilia": ("BRASILIA", "br"), "cdmx": ("MEXICO", "mx"),
+    "ciudad_de_mexico": ("MEXICO", "mx"), "guadalajara": ("GUADALAJARA", "mx"), "monterrey": ("MONTERREY", "mx"), "havana": ("LA HAVANE", "cu"),
+    "habana": ("LA HAVANE", "cu"), "quito": ("QUITO", "ec"), "montevideo": ("MONTEVIDEO", "uy"),
+}
+_CITY_RX = re.compile(r" (" + "|".join(sorted((re.escape(c.replace("_", " ")) for c in CITIES), key=len, reverse=True)) + r") ")
 WIN = re.compile(r" (champion\w*|campeon\w*|sacre\w*|titre|title|gagne\w*|wins|won|victoire\w*|victory|vence|gana|trophee|trophy|medaille\w*|medal\w*|record) ")
 
 
@@ -125,6 +166,12 @@ def describe(title, summary, region):
         scene["dir"] = "up" if up > down else "down" if down > up else "up"
     if tid in ("sport", "f1") and WIN.search(text):
         scene["prop"] = "trophy" if tid == "sport" else "car"
+    if tid in ("sport", "f1"):
+        best_sport = max(((sid, 3 * len(rx.findall(nt)) + len(rx.findall(ns))) for sid, rx in _SPORT_RX), key=lambda kv: kv[1])
+        if best_sport[1]:
+            scene["sport"] = best_sport[0]
+    if tid in ("election", "gouvernement", "diplomatie"):
+        scene["bg"] = "capital"  # le monument du pays concerné
     # pays cités → drapeaux ; deuxième étiquette = pays principal, sinon un nom propre fiable
     flags = []
     for w in nt.split() + ns.split():
@@ -142,6 +189,16 @@ def describe(title, summary, region):
         if cands:
             named = LABELS.get(cands[0], cands[0].upper())
     scene["flags"] = (flags or ([REGION_FLAG[region]] if region in REGION_FLAG else []))[:2]
+    # ville citée (prioritaire pour l'étiquette et le monument), sinon pays principal
+    title_flags = [FLAGS[w] for w in nt.split() if w in FLAGS and FLAGS[w] != REGION_FLAG.get(region)]
+    m = _CITY_RX.search(nt) or (None if title_flags else _CITY_RX.search(ns))
+    if m:
+        city, ccode = CITIES[m.group(1).replace(" ", "_")]
+        scene["city"] = city
+        scene["country"] = ccode
+        named = city
+    else:
+        scene["country"] = (shown or flags or [REGION_FLAG.get(region, "latam")])[0]
     if named and named != label:
         scene["label"].append(re.sub(r"[^A-Z0-9 -]", "", named)[:14])
     return scene

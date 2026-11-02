@@ -28,6 +28,13 @@ Le site étant public, les textes des journaux n'y sont jamais publiés en clair
 en accès libre (jamais les articles payants, jamais un site qui refuse les robots) et le chiffre (AES-256) avec un code personnel,
 enregistré dans le secret GitHub `ACTU_READ_KEY`. Seule l'application où ce code a été saisi peut les lire.
 
+## En un coup d'œil
+
+À la fin de chaque article, une mini-vidéo en pixel art résume l'information en 5 étapes sous-titrées : **Où ?** (le monument
+du pays ou de la ville), **Qui ?** (les acteurs, en costume selon leur rôle), **Quoi ?** (l'action), **Liens** (qui est lié à qui)
+et **Et après ?** (les conséquences). Le scénario est calculé gratuitement par le robot à partir du texte de l'article (aucun
+service payant) et chiffré avec le code de lecture ; sans code, l'application en fait une version simplifiée à partir du titre.
+
 ## Comment ça marche
 
 - `app/` : l'application (HTML, CSS, JavaScript sans dépendance). Environ 110 Ko : seuls vos réglages restent sur le téléphone ;
