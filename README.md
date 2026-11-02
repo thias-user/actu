@@ -3,6 +3,11 @@
 Application d'actualité installable sur iPhone (application web, « PWA ») : chaque matin à 10h,
 un robot choisit l'essentiel de l'actualité et l'application le présente en défilement plein écran.
 
+**Installer :** scannez le QR code avec l'appareil photo de l'iPhone, ouvrez le lien dans Safari,
+puis Partager → « Sur l'écran d'accueil ». Adresse : https://thias-user.github.io/actu/
+
+<img src="qr-code-actu.png" alt="QR code d'installation d'ACTU" width="260">
+
 ## Les 5 onglets
 
 | Onglet | Contenu |

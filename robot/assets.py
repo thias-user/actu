@@ -63,18 +63,22 @@ def make_qr(url):
     qr.add_data(url)
     qr.make(fit=True)
     code = qr.make_image(fill_color="black", back_color="white").convert("RGB")
-    W = code.width + 160
+    lines = [("Scannez avec l'appareil photo de l'iPhone", 30, (0, 0, 0)),
+             ("puis dans Safari : Partager, « Sur l'écran d'accueil »", 22, (90, 90, 90)),
+             (url, 22, (150, 150, 150))]
+    probe = ImageDraw.Draw(Image.new("RGB", (1, 1)))
+    W = int(max([code.width + 160] + [probe.textlength(t, font=font(s)) + 100 for t, s, _ in lines]))
     H = code.height + 420
     card = Image.new("RGB", (W, H), (255, 255, 255))
     logo = icon(150)
     card.paste(logo, ((W - 150) // 2, 50))
     card.paste(code, ((W - code.width) // 2, 230))
     d = ImageDraw.Draw(card)
-    for text, size, y, color in [("Scannez avec l'appareil photo de l'iPhone", 34, code.height + 260, (0, 0, 0)),
-                                 ("puis dans Safari : Partager → « Sur l'écran d'accueil »", 26, code.height + 312, (90, 90, 90)),
-                                 (url, 24, code.height + 356, (150, 150, 150))]:
+    y = code.height + 262
+    for text, size, color in lines:
         f = font(size)
         d.text(((W - d.textlength(text, font=f)) / 2, y), text, font=f, fill=color)
+        y += size + 22
     out = ROOT / "qr-code-actu.png"
     card.save(out, optimize=True)
     print("QR code :", out)
