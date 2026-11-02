@@ -304,3 +304,27 @@ RESEARCH_QUERIES = {
     "musique": ("music|musical", "musique|musicale"),
     "mode": ("fashion", "mode vestimentaire|haute couture|vêtement"),
 }
+
+# Régions du monde de l'onglet ARTE (mots normalisés, alias de common.py appliqués ; "_" relie une expression).
+ARTE_REGIONS = [
+    ("france", "France", "france paris marseille lyon bretagne normandie provence alsace corse occitanie outre_mer guadeloupe martinique "
+     "ile_de_la_reunion guyane mayotte nouvelle_caledonie tahiti macron"),
+    ("europe", "Europe", "europe europeen* europeenne* eu germany berlin italy rome venise naples sicile spain madrid barcelone andalousie "
+     "uk london ecosse irlande ireland pologne poland ukraine kyiv russia moscow putin grece athenes portugal lisbonne suisse autriche "
+     "vienne belgique bruxelles pays_bas amsterdam suede norvege danemark finlande islande hongrie roumanie bulgarie balkans serbie croatie "
+     "bosnie kosovo albanie tchequie prague slovaquie baltes estonie lettonie lituanie scandinavie mediterranee alpes"),
+    ("afrique", "Afrique", "afrique africain* sahel mali niger burkina senegal dakar cote_d_ivoire abidjan nigeria ghana cameroun congo rdc "
+     "kinshasa rwanda burundi kenya ethiopie somalie soudan egypte caire maroc algerie tunisie libye madagascar mozambique angola namibie "
+     "afrique_du_sud zimbabwe tanzanie ouganda mobutu sahara"),
+    ("moyen-orient", "Moyen-Orient", "middleeast israel gaza palestine cisjordanie jerusalem liban beyrouth syrie damas irak bagdad iran "
+     "teheran arabie golfe qatar dubai emirats yemen jordanie turkey istanbul kurde* kurdistan hamas hezbollah"),
+    ("asie", "Asie", "asie asiatique* china beijing shanghai hong_kong taiwan japan tokyo coree seoul india delhi pakistan afghanistan "
+     "bangladesh nepal tibet himalaya mongolie vietnam thailande cambodge laos birmanie indonesie philippines malaisie singapour "
+     "kazakhstan ouzbekistan siberie"),
+    ("amerique-nord", "Amérique du Nord", "usa whitehouse trump washington new_york californie texas floride chicago hollywood "
+     "canada quebec montreal alaska"),
+    ("amerique-latine", "Amérique latine", "latam mexico bresil brazil argentina colombia venezuela chile peru bolivie equateur cuba "
+     "haiti guatemala honduras nicaragua salvador panama costa_rica uruguay paraguay amazonie patagonie andes caraibes"),
+    ("oceanie-poles", "Océanie & pôles", "australie nouvelle_zelande oceanie pacifique polynesie arctique antarctique groenland "
+     "banquise pole_nord pole_sud"),
+]

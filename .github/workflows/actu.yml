@@ -48,6 +48,7 @@ jobs:
       - name: Collecte des articles, replays, ARTE, recherche
         env:
           OPENALEX_API_KEY: ${{ secrets.OPENALEX_API_KEY }}
+          ACTU_READ_KEY: ${{ secrets.ACTU_READ_KEY }}
         run: python robot/run_daily.py ${{ (github.event_name == 'workflow_dispatch' && inputs.force) && '--force' || '' }}
       - name: Enregistrement des nouvelles données
         id: save

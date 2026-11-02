@@ -5,10 +5,11 @@ from datetime import datetime, timezone
 import feedparser
 
 from common import DATA, PARIS, clean_text, compile_keywords, fetch, from_struct, iso, log, norm, now_paris, parallel, read_json, write_json
-from config import ARTE_CHANNELS, ARTE_PLAYLISTS, ARTE_SUBJECTS
+from config import ARTE_CHANNELS, ARTE_PLAYLISTS, ARTE_REGIONS, ARTE_SUBJECTS
 
 MAX_VIDEOS = 1500
 SUBJECT_RX = [(sid, compile_keywords(words.split())) for sid, _, words in ARTE_SUBJECTS]
+REGION_RX = [(rid, compile_keywords(words.split())) for rid, _, words in ARTE_REGIONS]
 
 
 def ytdlp_entries(url, limit):
@@ -47,6 +48,14 @@ def classify(v, default=None, hint=None):
             scores[s] = scores.get(s, 0) + 3
     best = [s for s, n in sorted(scores.items(), key=lambda kv: -kv[1]) if n >= 2][:2]
     return best or ["societe"]
+
+
+def regions_of(v):
+    """Régions du monde dont parle le reportage (2 au plus), d'après les lieux cités."""
+    title = norm(v["title"])
+    text = norm(" ".join([v["title"], v.get("desc", "")[:400], " ".join(v.get("playlists", []))]))
+    scores = {rid: 2 * len(rx.findall(title)) + len(rx.findall(text)) for rid, rx in REGION_RX}
+    return [r for r, n in sorted(scores.items(), key=lambda kv: -kv[1]) if n >= 2][:2]
 
 
 def update(full=False):
@@ -108,14 +117,16 @@ def update(full=False):
         hint = hints[vid][0][0] if vid in hints else None
         v["subjects"] = classify(v, v.pop("_default", None) or next((c[3] for c in ARTE_CHANNELS if c[0] == v.get("channel")), None), hint)
         v["desc"] = (v.get("desc") or "")[:300]
+        v["regions"] = regions_of(v)
         v.setdefault("date", v.get("added"))
     ordered = sorted(videos.values(), key=lambda v: v.get("date") or "", reverse=True)[:MAX_VIDEOS]
     subjects = [{"id": sid, "label": label, "count": sum(sid in v["subjects"] for v in ordered)} for sid, label, _ in ARTE_SUBJECTS]
-    keep = ("id", "title", "program", "channel", "duration", "views", "date", "desc", "subjects", "added", "playlists")
+    regions = [{"id": rid, "label": label, "count": sum(rid in v["regions"] for v in ordered)} for rid, label, _ in ARTE_REGIONS]
+    keep = ("id", "title", "program", "channel", "duration", "views", "date", "desc", "subjects", "regions", "added", "playlists")
     slim = [{k: v[k] for k in keep if v.get(k)} for v in ordered]
-    if slim == old.get("videos") and subjects == old.get("subjects"):
+    if slim == old.get("videos") and subjects == old.get("subjects") and regions == old.get("regions"):
         log("ARTE : aucun nouveau reportage")
         return
-    write_json(path, {"updated": iso(now_paris()), "subjects": subjects, "videos": slim})
+    write_json(path, {"updated": iso(now_paris()), "subjects": subjects, "regions": regions, "videos": slim})
     ok = sum(r is not None for r in listed)
     log(f"ARTE : {len(ordered)} reportages ({added} nouveaux, chaînes lues {ok}/{len(ARTE_CHANNELS)}, mode {'complet' if full else 'rapide'})")

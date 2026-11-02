@@ -1,7 +1,8 @@
 """Collecte des articles et construction des éditions quotidiennes (app/data/days/AAAA-MM-JJ.json).
 
 Une édition = les articles parus depuis l'édition précédente (au plus tard la veille à 10h).
-Pour chaque région on garde ~10 candidats classés ; l'application en affiche 3 (selon vos centres d'intérêt).
+Pour chaque région on garde jusqu'à 30 sujets classés ; l'application en affiche 3 par défaut (réglable),
+selon vos centres d'intérêt. Chaque article reçoit aussi la description de sa scène pixel art (scenes.py).
 """
 import math
 import re
@@ -13,9 +14,10 @@ import feedparser
 from common import (DATA, PARIS, classify, clean_text, detect_lang, fetch, from_struct, idf_table, iso, log,
                     norm, now_paris, parallel, parse_iso, read_json, short_id, similarity, tokens, write_json)
 from config import BLACKLIST, FEEDS, GEO_SETS, LIVE_MARKERS, REGION_ORDER, REGIONS
+from scenes import describe
 
-CANDIDATES_PER_REGION = 10
-MAX_PER_SOURCE = 3
+CANDIDATES_PER_REGION = 30  # l’app en affiche 3 par défaut, jusqu’à tous si vous le réglez
+MAX_PER_SOURCE = 6
 CUTOFF_HOUR = 10
 BACKFILL_DAYS = 3
 _BL = [" " + b + " " for b in BLACKLIST]
@@ -212,7 +214,7 @@ def to_public(it):
         "id": short_id(canonical_url(it["url"])), "title": it["title"], "summary": it["summary"], "url": it["url"],
         "source": it["source"], "date": iso(it["date"]), "image": it["image"], "themes": it["themes"],
         "score": it["score"], "coverage": it["coverage"], "also": it["also"][:6], "paywall": it["paywall"],
-        "posts": [],
+        "scene": describe(it["title"], it["summary"], it["region"]), "posts": [],
     }
 
 

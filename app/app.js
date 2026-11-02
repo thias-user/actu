@@ -1,16 +1,17 @@
 /* ACTU — application web installable. Aucune donnée n'est stockée sur le téléphone hormis vos réglages. */
 'use strict';
 
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 const DATA = 'data/';
 const REGIONS = {
-  fr: { label: 'France', flag: '🇫🇷', color: 'var(--fr)' },
-  eu: { label: 'Europe', flag: '🇪🇺', color: 'var(--eu)' },
-  us: { label: 'États-Unis', flag: '🇺🇸', color: 'var(--us)' },
-  latam: { label: 'Amérique latine', flag: '🌎', color: 'var(--latam)' },
+  fr: { label: 'France', flag: '🇫🇷', color: 'var(--fr)', ink: '#fff' },
+  eu: { label: 'Europe', flag: '🇪🇺', color: 'var(--eu)', ink: '#000' },
+  us: { label: 'États-Unis', flag: '🇺🇸', color: 'var(--us)', ink: '#fff' },
+  latam: { label: 'Amérique latine', flag: '🌎', color: 'var(--latam)', ink: '#000' },
 };
 const ORDER = ['fr', 'eu', 'us', 'latam'];
 const PER_REGION = 3;
+const ALL = 999; // « Tous les articles »
 const CUSTOM_COLORS = ['#f59e0b', '#10b981', '#e879f9', '#38bdf8', '#f43f5e', '#a3e635'];
 
 const $ = (sel, el = document) => el.querySelector(sel);
@@ -121,6 +122,13 @@ function customThemes() {
 function allThemes() { return [...state.themes, ...customThemes()]; }
 function themeById(id) { return allThemes().find((t) => t.id === id); }
 function interests() { return new Set(store.get('interests', state.themes.map((t) => t.id)).concat(customThemes().map((t) => t.id))); }
+/** Régions du fil, dans l'ordre choisi : [{ id, on, n }] (n = nombre d'articles, ALL = tous). */
+function regionPrefs() {
+  const saved = store.get('regions', []);
+  const list = saved.filter((r) => REGIONS[r.id]);
+  for (const id of ORDER) if (!list.some((r) => r.id === id)) list.push({ id, on: true, n: PER_REGION });
+  return list;
+}
 
 const rxCache = new Map();
 function customRx(t) {
@@ -147,17 +155,20 @@ function pick(arts, n = PER_REGION) {
     const th = themesOf(a);
     const hits = th.filter((t) => fav.has(t)).length;
     const bonus = hits ? 0.25 + 0.04 * Math.min(hits, 2) : (th.length ? -0.15 : 0);
-    return { a, s: a.score + bonus };
+    return { a, s: a.score + bonus + (a.full && reader.code() ? 0.08 : 0) };
   }).sort((x, y) => y.s - x.s);
+  // d'abord une source différente par article, puis on complète si vous demandez plus d'articles
   const out = [];
   const sources = new Set();
   for (const { a } of ranked) {
-    if (sources.has(a.source)) continue;
-    sources.add(a.source);
-    out.push(a);
-    if (out.length === n) break;
+    if (out.length >= n) break;
+    if (!sources.has(a.source)) { sources.add(a.source); out.push(a); }
   }
-  return out;
+  for (const { a } of ranked) {
+    if (out.length >= n) break;
+    if (!out.includes(a)) out.push(a);
+  }
+  return out.sort((x, y) => ranked.findIndex((r) => r.a === x) - ranked.findIndex((r) => r.a === y));
 }
 function chipsHTML(ids, max = 3) {
   return ids.slice(0, max).map((id) => {
@@ -210,7 +221,7 @@ async function loadNextDay() {
 }
 
 function renderDay(day, isFirst) {
-  const regions = ORDER.map((r) => [r, pick(day.regions[r] || [])]).filter(([, l]) => l.length);
+  const regions = regionPrefs().filter((r) => r.on).map((r) => [r.id, pick(day.regions[r.id] || [], r.n)]).filter(([, l]) => l.length);
   const frag = document.createDocumentFragment();
   const intro = document.createElement('section');
   intro.className = 'slide intro';
@@ -219,7 +230,7 @@ function renderDay(day, isFirst) {
     <div class="kicker">${esc(cap(fmtLong.format(new Date(day.date + 'T12:00:00'))))}</div>
     <h2>${isFirst && day.date === todayISO() ? 'L’essentiel du jour' : `L’édition ${day.date === addDays(todayISO(), -1) ? 'd’hier' : 'du ' + esc(fmtShort.format(new Date(day.date + 'T12:00:00')))}`}</h2>
     <p class="sub">${isFirst && updated ? `Mise à jour ${updated.toDateString() === new Date().toDateString() ? 'aujourd’hui' : 'le ' + esc(fmtShort.format(updated))} à ${esc(fmtTime.format(updated))} · prochaine demain à 10h` : 'Suite de votre fil : les articles de la veille.'}</p>
-    <ol>${regions.map(([r, l]) => `<li style="--rc:${REGIONS[r].color}"><span class="sw"></span>${REGIONS[r].flag} ${REGIONS[r].label}<small>${l.length} article${l.length > 1 ? 's' : ''}</small></li>`).join('')}</ol>
+    <ol>${regions.map(([r, l]) => `<li style="--rc:${REGIONS[r].color}"><span class="sw"></span>${REGIONS[r].flag} ${REGIONS[r].label}<small>${l.length} article${l.length > 1 ? 's' : ''}</small></li>`).join('') || '<li>Aucune région choisie : voir Réglages</li>'}</ol>
     <div class="hint"><svg viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></svg>Glissez vers le haut</div>`;
   frag.append(intro);
   for (const [r, list] of regions) {
@@ -236,11 +247,11 @@ function articleSlide(a, region, i, n, date) {
   const el = document.createElement('article');
   el.className = 'slide';
   el.style.setProperty('--rc', REGIONS[region].color);
+  el.style.setProperty('--ink', REGIONS[region].ink);
   el.tabIndex = 0;
   const posts = a.posts?.length || 0;
   el.innerHTML = `
-    <div class="fallback"><span>${esc(a.source)}</span></div>
-    ${a.image ? `<img class="bg" data-src="${esc(a.image)}" alt="" referrerpolicy="no-referrer" decoding="async">` : ''}
+    <canvas class="scene" aria-hidden="true"></canvas>
     <div class="shade"></div>
     <header class="slide-top">
       <span class="pill region">${REGIONS[region].flag} ${REGIONS[region].label} · ${i + 1}/${n}</span>
@@ -251,7 +262,7 @@ function articleSlide(a, region, i, n, date) {
       <h2 class="headline">${esc(a.title)}</h2>
       ${a.summary ? `<p class="dek">${esc(a.summary)}</p>` : ''}
       <div class="chips">${chipsHTML(themesOf(a))}</div>
-      <div class="cta">Lire l’article<svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></div>
+      <div class="cta">${a.full ? 'Lire l’article en entier' : 'Lire l’article'}<svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></div>
     </div>
     <aside class="rail">
       ${a.coverage > 1 ? `<div title="Sources qui traitent ce sujet"><span class="round"><svg viewBox="0 0 24 24"><use href="#i-layers"/></svg></span>${a.coverage}</div>` : ''}
@@ -260,9 +271,10 @@ function articleSlide(a, region, i, n, date) {
     </aside>`;
   el.addEventListener('click', (ev) => {
     if (ev.target.closest('[data-share]')) { ev.stopPropagation(); share(a.title, a.url); return; }
-    openArticle(a, region);
+    openArticle(a, region, date);
   });
-  el.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') openArticle(a, region); });
+  el.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') openArticle(a, region, date); });
+  Pixel.mount($('canvas', el), a.scene || Pixel.fallback(a), a.id, { width: 80, ground: 0.47, labelY: 0.13 });
   return el;
 }
 
@@ -288,26 +300,88 @@ function closeSheet(fromHistory = false) {
   if (!fromHistory && history.state?.sheet) history.back();
 }
 
-function openArticle(a, region) {
+function openArticle(a, region, date) {
   const r = REGIONS[region];
+  const unavailable = a.full === false
+    ? `<p class="small">${a.paywall ? 'Ce journal réserve cet article à ses abonnés : il se lit sur son site.' : 'Ce journal ne permet pas la lecture dans ACTU : l’article se lit sur son site.'}</p>` : '';
   openSheet(`
     ${a.image ? `<img class="hero" data-src="${esc(a.image)}" alt="" referrerpolicy="no-referrer">` : ''}
-    <div class="sheet-content" style="--rc:${r.color}">
+    <div class="sheet-content" style="--rc:${r.color};--ink:${r.ink}">
       <div class="meta"><span class="pill region">${r.flag} ${r.label}</span><b>${esc(a.source)}</b><span class="dot">${esc(cap(fmtLong.format(new Date(a.date))))} à ${esc(fmtTime.format(new Date(a.date)))}</span></div>
       <h1>${esc(a.title)}</h1>
       ${a.summary ? `<p class="lead">${esc(a.summary)}</p>` : ''}
       <div class="chips" style="margin-bottom:18px">${chipsHTML(themesOf(a), 4)}</div>
-      <a class="btn primary" href="${href(a.url)}" target="_blank" rel="noopener">Lire l’article sur ${esc(a.source)}<svg viewBox="0 0 24 24"><use href="#i-ext"/></svg></a>
+      <div id="fulltext">${a.full ? '<p class="status">Chargement de l’article…</p>' : ''}</div>
+      <a class="btn ${a.full ? '' : 'primary'}" href="${href(a.url)}" target="_blank" rel="noopener">${a.full ? 'Voir l’article sur le site de ' : 'Lire l’article sur '}${esc(a.source)}<svg viewBox="0 0 24 24"><use href="#i-ext"/></svg></a>
       <div class="btn-row"><button class="btn" data-share>Partager<svg viewBox="0 0 24 24"><use href="#i-share"/></svg></button></div>
-      ${a.paywall ? '<p class="small">Ce journal réserve une partie de ses articles à ses abonnés.</p>' : ''}
+      ${unavailable}
       ${a.also?.length ? `<p class="small">Sujet aussi traité par : ${a.also.map(esc).join(', ')}.</p>` : ''}
+      <h3 class="section-title">En un coup d’œil</h3>
+      <canvas class="scene-box" aria-label="Scène animée résumant l’article"></canvas>
       <h3 class="section-title">Sur les réseaux</h3>
       ${a.posts?.length ? `<div class="posts">${a.posts.map(postHTML).join('')}</div>`
         : '<p class="small">Aucune publication pertinente des chaînes d’information et créateurs suivis (HugoDécrypte, Ulyces, franceinfo, Le Monde, AFP…) pour l’instant. ACTU vérifie à nouveau chaque matin.</p>'}
     </div>`, (body) => {
     $('[data-share]', body).addEventListener('click', () => share(a.title, a.url));
     bindPosts(body);
+    Pixel.mount($('.scene-box', body), a.scene || Pixel.fallback(a), a.id + ':fiche', { width: 128, ground: 0.8, labelY: 0.1 });
+    if (a.full) showFullText(a, date, $('#fulltext', body));
   });
+}
+
+/* ---------------------------------------------------------------- lecture intégrale (textes chiffrés avec votre code) */
+const reader = {
+  files: new Map(), key: null, keyFor: '',
+  code() { return store.get('readcode', ''); },
+  async getKey() {
+    const code = this.code().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (!code) throw new Error('nocode');
+    if (this.key && this.keyFor === code) return this.key;
+    const enc = new TextEncoder();
+    const base = await crypto.subtle.importKey('raw', enc.encode(code), 'PBKDF2', false, ['deriveKey']);
+    this.key = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt: enc.encode('actu-lecture-v1'), iterations: 150000, hash: 'SHA-256' },
+      base, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+    this.keyFor = code;
+    return this.key;
+  },
+  texts(date) {
+    if (!this.files.has(date)) {
+      const job = (async () => {
+        if (typeof DecompressionStream === 'undefined') throw new Error('old');
+        const key = await this.getKey();
+        const res = await fetch(`${DATA}texts/${date}.bin`, { cache: date === state.index.days[0] ? 'no-cache' : 'default' });
+        if (res.status === 404) return {};
+        if (!res.ok) throw new Error('net');
+        const buf = new Uint8Array(await res.arrayBuffer());
+        let plain;
+        try { plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: buf.slice(0, 12) }, key, buf.slice(12)); } catch { throw new Error('badcode'); }
+        const stream = new Blob([plain]).stream().pipeThrough(new DecompressionStream('gzip'));
+        return JSON.parse(await new Response(stream).text());
+      })();
+      job.catch(() => this.files.delete(date));
+      this.files.set(date, job);
+    }
+    return this.files.get(date);
+  },
+  reset() { this.files.clear(); this.key = null; this.keyFor = ''; },
+};
+async function showFullText(a, date, box) {
+  if (!reader.code()) {
+    box.innerHTML = '<div class="unlock"><p>Le texte complet de cet article se lit directement dans ACTU.</p><button class="btn primary" data-action="settings">Saisir mon code de lecture</button></div>';
+    return;
+  }
+  try {
+    const text = (await reader.texts(date))[a.id];
+    if (!text) { box.innerHTML = ''; return; }
+    let paras = text.split('\n').filter(Boolean);
+    const lead = norm(a.summary).trim().slice(0, 40);
+    if (lead && paras.length && norm(paras[0]).trim().startsWith(lead)) paras = paras.slice(1);
+    box.innerHTML = `<div class="article-text">${paras.map((p) => `<p>${esc(p)}</p>`).join('')}
+      <p class="small">Texte © ${esc(a.source)} · copie privée pour votre lecture personnelle.</p></div>`;
+  } catch (e) {
+    const msg = { badcode: 'Code de lecture incorrect : vérifiez-le dans Réglages.', old: 'Mettez à jour iOS (16.4 ou plus) pour lire les articles ici.', nocode: '' }[e.message];
+    box.innerHTML = `<p class="small">${msg ?? 'Texte indisponible pour le moment (connexion ?).'}</p>`;
+  }
 }
 
 function postHTML(p) {
@@ -352,7 +426,7 @@ function initExplore() {
   $('#ex-q').addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => { ex.shown = 60; renderExplore(); }, 200); });
   $('#ex-list').addEventListener('click', (ev) => {
     const row = ev.target.closest('[data-i]');
-    if (row) { const it = ex.view[+row.dataset.i]; openArticle(it.a, it.region); }
+    if (row) { const it = ex.view[+row.dataset.i]; openArticle(it.a, it.region, it.date); }
     if (ev.target.closest('[data-more]')) { ex.shown += 60; renderExplore(); }
   });
   refreshExplore(true);
@@ -470,7 +544,7 @@ async function initReplay() {
 }
 
 /* ---------------------------------------------------------------- 4. ARTE */
-const arte = { data: null, subject: '', sort: 'date', shown: 0, list: [], io: null };
+const arte = { data: null, subject: '', region: '', sort: 'date', shown: 0, list: [], io: null };
 
 async function initArte() {
   const grid = $('#arte-grid');
@@ -485,6 +559,17 @@ async function initArte() {
     if (!b) return;
     arte.subject = b.dataset.s;
     $$('[data-s]', box).forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    renderArte();
+  });
+  const regions = (arte.data.regions || []).filter((r) => r.count > 0);
+  const rbox = $('#arte-regions');
+  rbox.innerHTML = regions.length ? `<button class="chip" data-r="" aria-pressed="true">🌐 Toutes les régions</button>` +
+    regions.map((r) => `<button class="chip" data-r="${esc(r.id)}" aria-pressed="false">${esc(r.label)} <small>${r.count}</small></button>`).join('') : '';
+  rbox.addEventListener('click', (ev) => {
+    const b = ev.target.closest('[data-r]');
+    if (!b) return;
+    arte.region = b.dataset.r;
+    $$('[data-r]', rbox).forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
     renderArte();
   });
   $('#arte-sort').addEventListener('click', (ev) => {
@@ -512,6 +597,7 @@ function renderArte() {
     long: (a, b) => b.duration - a.duration,
   };
   arte.list = arte.data.videos.filter((v) => (!arte.subject || v.subjects.includes(arte.subject)) &&
+    (!arte.region || (v.regions || []).includes(arte.region)) &&
     (!q || norm(v.title + ' ' + (v.program || '') + ' ' + (v.desc || '')).includes(' ' + q))).sort(sorters[arte.sort]);
   arte.shown = 0;
   $('#arte-grid').innerHTML = arte.list.length ? '' : '<p class="empty">Aucun reportage ne correspond.</p>';
@@ -519,14 +605,14 @@ function renderArte() {
 }
 function moreArte() {
   if (!arte.data || arte.shown >= arte.list.length) return;
-  const label = Object.fromEntries(arte.data.subjects.map((s) => [s.id, s.label]));
+  const label = Object.fromEntries(arte.data.subjects.concat(arte.data.regions || []).map((s) => [s.id, s.label]));
   const slice = arte.list.slice(arte.shown, arte.shown + 24);
   const html = slice.map((v, k) => `
     <button class="vcard" data-v="${arte.shown + k}">
       <span class="vthumb"><img data-src="https://i.ytimg.com/vi/${esc(v.id)}/mqdefault.jpg" alt="" referrerpolicy="no-referrer"><span class="dur">${duration(v.duration)}</span></span>
       <span class="vt">${esc(v.title)}</span>
       <span class="vm">${esc(v.program || v.channel)} · ${v.date ? esc(fmtShort.format(new Date(v.date + 'T12:00:00'))) : ''}${v.views ? ' · ' + fmtNum.format(v.views) + ' vues' : ''}</span>
-      <span class="vm">${v.subjects.map((s) => esc(label[s] || s)).join(' · ')}</span>
+      <span class="vm">${v.subjects.concat(v.regions || []).map((s) => esc(label[s] || s)).join(' · ')}</span>
     </button>`).join('');
   arte.shown += slice.length;
   const grid = $('#arte-grid');
@@ -544,7 +630,48 @@ function openVideo(v) {
     </div>`);
 }
 
-/* ---------------------------------------------------------------- 5. Recherche */
+/* ---------------------------------------------------------------- 5. TikTok des grands médias */
+// Comptes officiels vérifiés (outil d'intégration public de TikTok). Le module de TikTok montre leurs dernières vidéos.
+const TIKTOK = [
+  ['France', [['lemondefr', 'Le Monde'], ['franceinfo', 'franceinfo'], ['france24', 'France 24'], ['afpfr', 'AFP'], ['hugodecrypte', 'HugoDécrypte'],
+    ['lefigaro', 'Le Figaro'], ['leparisien', 'Le Parisien'], ['tf1info', 'TF1 INFO'], ['bfmtv', 'BFMTV'], ['rfi', 'RFI'], ['franceinter', 'France Inter'],
+    ['ouestfrance', 'Ouest-France'], ['konbini', 'Konbini']]],
+  ['Monde', [['afp', 'AFP News'], ['reuters', 'Reuters'], ['apnews', 'AP'], ['bbcnews', 'BBC News'], ['guardian', 'The Guardian'], ['dwnews', 'DW News'],
+    ['aljazeeraenglish', 'Al Jazeera'], ['skynews', 'Sky News']]],
+  ['États-Unis', [['nytimes', 'New York Times'], ['washingtonpost', 'Washington Post'], ['cnn', 'CNN'], ['nbcnews', 'NBC News'], ['abcnews', 'ABC News'], ['cbsnews', 'CBS News']]],
+  ['Espagnol', [['elpais', 'El País'], ['infobae', 'Infobae'], ['clarincom', 'Clarín'], ['lanacioncom', 'La Nación'], ['cnnee', 'CNN en Español'], ['dw_espanol', 'DW Español']]],
+];
+function initTiktok() {
+  const box = $('#tt-accounts');
+  box.innerHTML = TIKTOK.map(([group, list]) => `<div class="tt-group"><span>${esc(group)}</span><div class="chips scroll-x">${list.map(([h, name]) =>
+    `<button class="chip" data-h="${esc(h)}" aria-pressed="false">${esc(name)}</button>`).join('')}</div></div>`).join('');
+  box.addEventListener('click', (ev) => {
+    const b = ev.target.closest('[data-h]');
+    if (!b) return;
+    $$('[data-h]', box).forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    store.set('tiktok', b.dataset.h);
+    renderTiktok(b.dataset.h, b.textContent);
+  });
+  const last = store.get('tiktok', 'lemondefr');
+  ($(`[data-h="${CSS.escape(last)}"]`, box) || $('[data-h]', box)).click();
+}
+function renderTiktok(handle, name) {
+  const h = encodeURIComponent(handle);
+  $('#tt-embed').innerHTML = `
+    <blockquote class="tiktok-embed" cite="https://www.tiktok.com/@${h}" data-unique-id="${esc(handle)}" data-embed-type="creator" style="max-width:780px;min-width:288px;">
+      <section><a target="_blank" rel="noopener" href="https://www.tiktok.com/@${h}?refer=creator_embed">@${esc(handle)}</a></section>
+    </blockquote>
+    <a class="btn" style="margin-top:12px;width:100%" href="https://www.tiktok.com/@${h}" target="_blank" rel="noopener">Ouvrir ${esc(name)} dans TikTok<svg viewBox="0 0 24 24"><use href="#i-ext"/></svg></a>`;
+  // le module de TikTok ne lit que les blocs présents à son chargement : on le recharge pour chaque compte
+  $('#tiktok-js')?.remove();
+  const sc = document.createElement('script');
+  sc.id = 'tiktok-js';
+  sc.async = true;
+  sc.src = 'https://www.tiktok.com/embed.js';
+  document.body.append(sc);
+}
+
+/* ---------------------------------------------------------------- 6. Recherche */
 const rs = { curated: null, theme: '' };
 const OA_SELECT = 'id,display_name,publication_year,authorships,primary_location,cited_by_count,doi,open_access,language,abstract_inverted_index';
 
@@ -679,6 +806,21 @@ function openSettings() {
   const idx = state.index;
   openSheet(`<div class="settings">
     <h2>Réglages</h2>
+    <h3>Mes régions</h3>
+    <p class="small">Choisissez les régions du fil « À la une », leur ordre et le nombre d’articles par jour.</p>
+    <div id="st-regions">${regionPrefs().map((r, i, all) => `<div class="reg-row" data-id="${r.id}">
+      <button class="chip" data-tog aria-pressed="${r.on}">${REGIONS[r.id].flag} ${REGIONS[r.id].label}</button>
+      <select data-n aria-label="Nombre d’articles">${[1, 2, 3, 5, 10, 20, ALL].map((n) => `<option value="${n}"${n === r.n ? ' selected' : ''}>${n === ALL ? 'Tous' : n}</option>`).join('')}</select>
+      <button class="icon-btn" data-move="-1" aria-label="Monter"${i === 0 ? ' disabled' : ''}>↑</button>
+      <button class="icon-btn" data-move="1" aria-label="Descendre"${i === all.length - 1 ? ' disabled' : ''}>↓</button>
+    </div>`).join('')}</div>
+    <h3>Lecture intégrale</h3>
+    <p class="small">Votre code de lecture personnel permet de lire les articles en accès libre en entier dans ACTU. Il se saisit une seule fois.</p>
+    <form id="st-code-form">
+      <label class="field"><span>Code de lecture</span><input id="st-code" value="${esc(reader.code())}" placeholder="XXXX-XXXX-XXXX-XXXX" autocapitalize="characters" autocomplete="off" spellcheck="false"></label>
+      <button class="btn" style="width:100%">Enregistrer le code</button>
+      <p class="small" id="st-code-msg"></p>
+    </form>
     <h3>Mes centres d’intérêt</h3>
     <p class="small">Les articles de ces thèmes passent en priorité dans « À la une ».</p>
     <div class="chips" id="st-fav">${state.themes.map((t) => `<button class="chip" data-id="${t.id}" aria-pressed="${fav.has(t.id)}">${t.emoji} ${esc(t.label)}</button>`).join('')}</div>
@@ -702,6 +844,36 @@ function openSettings() {
     <h3>À propos</h3>
     <p class="small">Sélection automatique parmi ${'≈ 90'} flux de journaux (France ; Europe en anglais ; États-Unis ; Amérique latine en espagnol), publications YouTube et Bluesky des médias et créateurs d’information, replays TF1+ et france.tv, ARTE sur YouTube, OpenAlex et HAL. Version ${VERSION}.</p>
   </div>`, (body) => {
+    const saveRegions = () => {
+      store.set('regions', $$('.reg-row', body).map((row) => ({ id: row.dataset.id, on: $('[data-tog]', row).getAttribute('aria-pressed') === 'true', n: +$('[data-n]', row).value })));
+      state.dirty = true;
+    };
+    $('#st-regions', body).addEventListener('click', (ev) => {
+      const tog = ev.target.closest('[data-tog]');
+      if (tog) { tog.setAttribute('aria-pressed', String(tog.getAttribute('aria-pressed') !== 'true')); saveRegions(); }
+      const mv = ev.target.closest('[data-move]');
+      if (mv) {
+        const row = mv.closest('.reg-row');
+        if (+mv.dataset.move < 0 && row.previousElementSibling) row.parentNode.insertBefore(row, row.previousElementSibling);
+        if (+mv.dataset.move > 0 && row.nextElementSibling) row.parentNode.insertBefore(row.nextElementSibling, row);
+        saveRegions();
+        const scroll = sheet.body.scrollTop;
+        openSettings();
+        sheet.body.scrollTop = scroll;
+      }
+    });
+    $('#st-regions', body).addEventListener('change', saveRegions);
+    $('#st-code-form', body).addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const msg = $('#st-code-msg', body);
+      store.set('readcode', $('#st-code', body).value.trim().toUpperCase());
+      reader.reset();
+      state.dirty = true;
+      if (!reader.code()) { msg.textContent = 'Code effacé.'; return; }
+      msg.textContent = 'Vérification…';
+      try { await reader.texts(state.index.days[0]); msg.textContent = '✓ Code valide : les articles libres se lisent maintenant en entier.'; }
+      catch (e) { msg.textContent = e.message === 'badcode' ? '✗ Code incorrect.' : e.message === 'old' ? 'Mettez à jour iOS (16.4 ou plus).' : 'Impossible de vérifier (connexion ?).'; }
+    });
     $('#st-fav', body).addEventListener('click', (ev) => {
       const b = ev.target.closest('[data-id]');
       if (!b) return;
@@ -750,7 +922,7 @@ function* allLoadedArticles() {
 }
 
 /* ---------------------------------------------------------------- onglets */
-const INIT = { explore: initExplore, replay: initReplay, arte: initArte, research: initResearch };
+const INIT = { explore: initExplore, replay: initReplay, arte: initArte, tiktok: initTiktok, research: initResearch };
 function showTab(name) {
   $$('.view').forEach((v) => v.classList.toggle('active', v.id === 'view-' + name));
   $$('.tabbar button').forEach((b) => (b.dataset.tab === name ? b.setAttribute('aria-current', 'page') : b.removeAttribute('aria-current')));

@@ -8,17 +8,25 @@ puis Partager → « Sur l'écran d'accueil ». Adresse : https://thias-user.git
 
 <img src="qr-code-actu.png" alt="QR code d'installation d'ACTU" width="260">
 
-## Les 5 onglets
+## Les 6 onglets
 
 | Onglet | Contenu |
 | --- | --- |
-| **À la une** | 3 articles France (journaux français), 3 Europe (journaux européens en anglais), 3 États-Unis (journaux américains), 3 Amérique latine (en espagnol, presse d'Espagne ou d'Amérique latine). Puis les éditions de la veille, de l'avant-veille, etc. Chaque article : titre, source, date, résumé, lien, et à la fin les publications YouTube/Bluesky des médias et créateurs (HugoDécrypte, Ulyces, franceinfo, Le Monde, AFP…) qui en parlent. |
+| **À la une** | Défilement plein écran avec, pour chaque article, une petite scène pixel art animée qui résume le sujet (décor, personnages en costume, drapeaux). 3 articles France (journaux français), 3 Europe (journaux européens en anglais), 3 États-Unis (journaux américains), 3 Amérique latine (en espagnol, presse d'Espagne ou d'Amérique latine). Puis les éditions de la veille, de l'avant-veille, etc. Chaque article : titre, source, date, résumé, lien, et à la fin les publications YouTube/Bluesky des médias et créateurs (HugoDécrypte, Ulyces, franceinfo, Le Monde, AFP…) qui en parlent. |
 | **Explorer** | Tous les articles collectés, à trier par thème, date, source ou importance, et à filtrer par région, période ou mot-clé. |
 | **Le 20h** | Les journaux de 20h de TF1 (TF1+) et de France 2 (france.tv) des 14 derniers jours, avec les sujets du JT de TF1. |
-| **ARTE** | Les reportages en accès libre sur les chaînes YouTube d'ARTE, classés par sujet (géopolitique, histoire, philosophie, art…). |
+| **ARTE** | Les reportages en accès libre sur les chaînes YouTube d'ARTE, classés par sujet (géopolitique, histoire, philosophie, art…) et par région du monde. |
+| **TikTok** | Les dernières vidéos des comptes officiels des grands médias (Le Monde, franceinfo, AFP, BBC, Reuters, New York Times, El País…), via le module d'intégration de TikTok. |
 | **Recherche** | Recherche par mots-clés dans les publications scientifiques (OpenAlex, HAL), et une sélection par thème renouvelée tous les 3 mois. |
 
-Dans **Réglages** (roue dentée) : choisir ses centres d'intérêt et **ajouter ses propres thèmes** avec des mots-clés.
+Dans **Réglages** (roue dentée) : régions affichées, leur ordre et le **nombre d'articles par région (jusqu'à tous)**, centres d'intérêt,
+**thèmes personnalisés**, et le **code de lecture** qui permet de lire les articles en accès libre en entier dans l'application.
+
+## Lecture intégrale
+
+Le site étant public, les textes des journaux n'y sont jamais publiés en clair : le robot récupère chaque matin le texte des articles
+en accès libre (jamais les articles payants, jamais un site qui refuse les robots) et le chiffre (AES-256) avec un code personnel,
+enregistré dans le secret GitHub `ACTU_READ_KEY`. Seule l'application où ce code a été saisi peut les lire.
 
 ## Comment ça marche
 

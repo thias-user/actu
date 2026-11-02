@@ -9,11 +9,14 @@ import traceback
 from datetime import datetime, time as dtime, timedelta
 
 import arte
+import fulltext
 import news
 import replays
 import research
+import scenes
 import social
 from common import DATA, PARIS, iso, log, now_paris, read_json, write_json
+from news import day_path
 
 UPDATE_HOUR = 10
 
@@ -50,8 +53,13 @@ def main():
         if res is None:
             return 1
         built, failed = res
-        recent = sorted(p.stem for p in (DATA / "days").glob("*.json"))[-3:]
-        step("réseaux sociaux", social.update, [datetime.fromisoformat(d).date() for d in recent])
+        recent = [datetime.fromisoformat(d).date() for d in sorted(p.stem for p in (DATA / "days").glob("*.json"))[-3:]]
+        for d in recent:  # scènes pixel art (règles éventuellement modifiées)
+            ed = read_json(day_path(d))
+            if ed and scenes.refresh(ed):
+                write_json(day_path(d), ed)
+        step("réseaux sociaux", social.update, recent)
+        step("lecture intégrale", fulltext.update, recent)
     if args.only in (None, "replays"):
         step("replays", replays.update)
     if args.only in (None, "arte"):
