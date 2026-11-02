@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>ACTU</title>
+  <meta name="description" content="ACTU – l'essentiel de l'actualité chaque matin : France, Europe, États-Unis, Amérique latine.">
+  <meta name="theme-color" content="#000000">
+  <meta name="color-scheme" content="dark">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="ACTU">
+  <meta name="format-detection" content="telephone=no">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/favicon-32.png" sizes="32x32">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="preconnect" href="https://i.ytimg.com">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <main id="views">
+    <!-- 1. À la une : défilement plein écran -->
+    <section class="view active" id="view-feed" aria-label="À la une">
+      <div class="feed" id="feed" tabindex="-1">
+        <div class="slide loading-slide"><div class="spinner" aria-hidden="true"></div><p>Chargement de l'édition…</p></div>
+      </div>
+      <button class="icon-btn floating-settings" data-action="settings" aria-label="Réglages">
+        <svg viewBox="0 0 24 24"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg>
+      </button>
+    </section>
+
+    <!-- 2. Explorer : tri par thème, date, source -->
+    <section class="view" id="view-explore" aria-label="Explorer">
+      <header class="topbar">
+        <h1>Explorer</h1>
+        <button class="icon-btn" data-action="settings" aria-label="Réglages"><svg viewBox="0 0 24 24"><use href="#i-gear"/></svg></button>
+      </header>
+      <div class="filters">
+        <label class="search"><svg viewBox="0 0 24 24"><use href="#i-search"/></svg><input id="ex-q" type="search" placeholder="Rechercher un mot, un nom…" autocomplete="off" enterkeyhint="search"></label>
+        <div class="chips scroll-x" id="ex-themes"></div>
+        <div class="selects">
+          <label><span>Période</span><select id="ex-period">
+            <option value="1">Aujourd'hui</option><option value="3">3 jours</option><option value="7" selected>7 jours</option><option value="30">30 jours</option><option value="0">Tout</option>
+          </select></label>
+          <label><span>Région</span><select id="ex-region"><option value="">Toutes</option></select></label>
+          <label><span>Source</span><select id="ex-source"><option value="">Toutes</option></select></label>
+          <label><span>Trier par</span><select id="ex-sort">
+            <option value="date">Date (récent)</option><option value="date-asc">Date (ancien)</option><option value="theme">Thème</option><option value="source">Source</option><option value="score">Importance</option>
+          </select></label>
+        </div>
+      </div>
+      <div class="list" id="ex-list"></div>
+    </section>
+
+    <!-- 3. Le 20h : replays TF1 et France 2 -->
+    <section class="view" id="view-replay" aria-label="Le 20h">
+      <header class="topbar">
+        <h1>Le 20h</h1>
+        <button class="icon-btn" data-action="settings" aria-label="Réglages"><svg viewBox="0 0 24 24"><use href="#i-gear"/></svg></button>
+      </header>
+      <p class="note">Les journaux s'ouvrent sur <b>TF1+</b> et <b>france.tv</b> (gratuits, depuis la France ; TF1+ demande un compte gratuit).</p>
+      <div id="replay-list" class="replay-list"></div>
+    </section>
+
+    <!-- 4. ARTE : reportages en accès libre sur YouTube -->
+    <section class="view" id="view-arte" aria-label="ARTE">
+      <header class="topbar">
+        <h1>ARTE</h1>
+        <button class="icon-btn" data-action="settings" aria-label="Réglages"><svg viewBox="0 0 24 24"><use href="#i-gear"/></svg></button>
+      </header>
+      <div class="filters">
+        <label class="search"><svg viewBox="0 0 24 24"><use href="#i-search"/></svg><input id="arte-q" type="search" placeholder="Rechercher un reportage…" autocomplete="off" enterkeyhint="search"></label>
+        <div class="chips scroll-x" id="arte-subjects"></div>
+        <div class="segmented" id="arte-sort" role="radiogroup" aria-label="Tri">
+          <button data-sort="date" aria-pressed="true">Récents</button><button data-sort="views" aria-pressed="false">Populaires</button><button data-sort="long" aria-pressed="false">Plus longs</button>
+        </div>
+      </div>
+      <div class="grid" id="arte-grid"></div>
+      <div class="sentinel" id="arte-more"></div>
+    </section>
+
+    <!-- 5. Recherche : publications scientifiques -->
+    <section class="view" id="view-research" aria-label="Recherche">
+      <header class="topbar">
+        <h1>Recherche</h1>
+        <button class="icon-btn" data-action="settings" aria-label="Réglages"><svg viewBox="0 0 24 24"><use href="#i-gear"/></svg></button>
+      </header>
+      <form class="filters" id="rs-form" role="search">
+        <label class="search"><svg viewBox="0 0 24 24"><use href="#i-search"/></svg><input id="rs-q" type="search" placeholder="Mots-clés : ex. transition énergétique" autocomplete="off" enterkeyhint="search"></label>
+        <div class="selects">
+          <label><span>Langue</span><select id="rs-lang"><option value="">Français + anglais</option><option value="fr">Français</option><option value="en">Anglais</option></select></label>
+          <label><span>Trier par</span><select id="rs-sort"><option value="relevance">Pertinence</option><option value="cited">Plus cités</option><option value="recent">Plus récents</option></select></label>
+          <label><span>Depuis</span><select id="rs-since"><option value="">Toujours</option><option value="2020">2020</option><option value="2010">2010</option><option value="2000">2000</option><option value="1980">1980</option></select></label>
+        </div>
+      </form>
+      <div id="rs-results" class="list"></div>
+    </section>
+  </main>
+
+  <nav class="tabbar" aria-label="Onglets">
+    <button data-tab="feed" aria-current="page"><svg viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h10"/></svg><span>À la une</span></button>
+    <button data-tab="explore"><svg viewBox="0 0 24 24"><use href="#i-search"/></svg><span>Explorer</span></button>
+    <button data-tab="replay"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="12" rx="2"/><path d="M8 21h8M12 17v4"/></svg><span>Le 20h</span></button>
+    <button data-tab="arte"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="m10 9 5 3-5 3z"/></svg><span>ARTE</span></button>
+    <button data-tab="research"><svg viewBox="0 0 24 24"><path d="M4 19.5V5a2 2 0 0 1 2-2h12v16H6a2 2 0 0 0-2 2Zm0 0A2 2 0 0 0 6 21h12"/><path d="M9 7h6M9 11h4"/></svg><span>Recherche</span></button>
+  </nav>
+
+  <div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="sheet-backdrop" data-action="close"></div>
+    <div class="sheet-panel">
+      <button class="icon-btn sheet-close" data-action="close" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+      <div class="sheet-body" id="sheet-body"></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+  <div class="install" id="install" hidden>
+    <p><b>Installer ACTU</b> : touchez <svg viewBox="0 0 24 24" class="inline"><path d="M12 3v12M8 7l4-4 4 4M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg> <b>Partager</b>, puis <b>« Sur l'écran d'accueil »</b>.</p>
+    <button class="icon-btn" data-action="hide-install" aria-label="Masquer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+  </div>
+
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></symbol>
+    <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 3v12M8 7l4-4 4 4M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></symbol>
+    <symbol id="i-ext" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12Z"/></symbol>
+    <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 13 9 5 9-5"/></symbol>
+  </svg>
+  <script src="app.js" defer></script>
+</body>
+</html>

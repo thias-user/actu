@@ -1,0 +1,82 @@
+name: ACTU – mise à jour et publication
+
+on:
+  schedule:
+    # 10h à Paris = 9h UTC l'hiver, 8h UTC l'été : on passe aux deux heures, le robot ne travaille qu'une fois par jour.
+    - cron: "5 8 * * *"
+    - cron: "5 9 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Mettre à jour tout de suite"
+        type: boolean
+        default: true
+  push:
+    branches: [main]
+    paths: ["app/**", "robot/**", ".github/workflows/**"]
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: actu
+  cancel-in-progress: false
+
+jobs:
+  update:
+    if: github.event_name != 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    outputs:
+      changed: ${{ steps.save.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: robot/requirements.txt
+      - run: pip install -r robot/requirements.txt
+      - name: Mémoire des publications récentes (réseaux sociaux)
+        uses: actions/cache@v4
+        with:
+          path: robot/state
+          key: actu-state-${{ github.run_id }}
+          restore-keys: actu-state-
+      - name: Collecte des articles, replays, ARTE, recherche
+        env:
+          OPENALEX_API_KEY: ${{ secrets.OPENALEX_API_KEY }}
+        run: python robot/run_daily.py ${{ (github.event_name == 'workflow_dispatch' && inputs.force) && '--force' || '' }}
+      - name: Enregistrement des nouvelles données
+        id: save
+        run: |
+          git config user.name "actu-robot"
+          git config user.email "actu-robot@users.noreply.github.com"
+          git add app/data
+          if git diff --cached --quiet; then
+            echo "Rien de nouveau"
+          else
+            git commit -m "Édition du $(TZ=Europe/Paris date +%d/%m/%Y)"
+            git push
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  deploy:
+    needs: update
+    if: always() && (github.event_name == 'push' || needs.update.outputs.changed == 'true')
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.pages.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: app
+      - id: pages
+        uses: actions/deploy-pages@v4

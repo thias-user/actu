@@ -1,0 +1,808 @@
+/* ACTU — application web installable. Aucune donnée n'est stockée sur le téléphone hormis vos réglages. */
+'use strict';
+
+const VERSION = '1.0.0';
+const DATA = 'data/';
+const REGIONS = {
+  fr: { label: 'France', flag: '🇫🇷', color: 'var(--fr)' },
+  eu: { label: 'Europe', flag: '🇪🇺', color: 'var(--eu)' },
+  us: { label: 'États-Unis', flag: '🇺🇸', color: 'var(--us)' },
+  latam: { label: 'Amérique latine', flag: '🌎', color: 'var(--latam)' },
+};
+const ORDER = ['fr', 'eu', 'us', 'latam'];
+const PER_REGION = 3;
+const CUSTOM_COLORS = ['#f59e0b', '#10b981', '#e879f9', '#38bdf8', '#f43f5e', '#a3e635'];
+
+const $ = (sel, el = document) => el.querySelector(sel);
+const $$ = (sel, el = document) => [...el.querySelectorAll(sel)];
+const state = { index: null, themes: [], days: new Map(), loaded: new Map(), inited: new Set(), lastCheck: Date.now() };
+
+/* ---------------------------------------------------------------- réglages (localStorage, protégé) */
+const store = {
+  get(key, fallback) {
+    try { const v = localStorage.getItem('actu.' + key); return v === null ? fallback : JSON.parse(v); } catch { return fallback; }
+  },
+  set(key, value) {
+    try { localStorage.setItem('actu.' + key, JSON.stringify(value)); } catch { /* navigation privée */ }
+  },
+};
+
+/* ---------------------------------------------------------------- outils */
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+/** Lien venant des données : uniquement http(s), sinon lien neutre. */
+const href = (u) => (/^https?:\/\//i.test(u || '') ? esc(u) : '#');
+const norm = (s) => ' ' + String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() + ' ';
+const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+const todayISO = () => isoDate(new Date());
+function isoDate(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function addDays(iso, n) {
+  const d = new Date(iso + 'T12:00:00');
+  d.setDate(d.getDate() + n);
+  return isoDate(d);
+}
+const fmtLong = new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+const fmtShort = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short' });
+const fmtTime = new Intl.DateTimeFormat('fr-FR', { hour: '2-digit', minute: '2-digit' });
+const fmtNum = new Intl.NumberFormat('fr-FR');
+
+function dayLabel(iso) {
+  if (iso === todayISO()) return "Aujourd'hui";
+  if (iso === addDays(todayISO(), -1)) return 'Hier';
+  return cap(fmtLong.format(new Date(iso + 'T12:00:00')));
+}
+function when(isoString) {
+  const d = new Date(isoString);
+  if (isNaN(d)) return '';
+  const h = (Date.now() - d) / 36e5;
+  if (h >= 0 && h < 1) return `il y a ${Math.max(1, Math.round(h * 60))} min`;
+  if (h >= 0 && h < 12) return `il y a ${Math.round(h)} h`;
+  return `${fmtShort.format(d)}, ${fmtTime.format(d)}`;
+}
+function duration(sec) {
+  const m = Math.round(sec / 60);
+  return m >= 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}` : `${m} min`;
+}
+
+async function getJSON(path, fresh = false) {
+  const res = await fetch(DATA + path, { cache: fresh ? 'no-cache' : 'default' });
+  if (!res.ok) throw new Error(`${path} : ${res.status}`);
+  return res.json();
+}
+function loadDay(date) {
+  if (!state.days.has(date)) {
+    const p = getJSON(`days/${date}.json`, date === state.index.days[0])
+      .then((d) => { state.loaded.set(date, d); return d; })
+      .catch((e) => { state.days.delete(date); throw e; });
+    state.days.set(date, p);
+  }
+  return state.days.get(date);
+}
+
+let toastTimer;
+function toast(html, ms = 3500) {
+  const t = $('#toast');
+  t.innerHTML = html;
+  t.hidden = false;
+  clearTimeout(toastTimer);
+  if (ms) toastTimer = setTimeout(() => { t.hidden = true; }, ms);
+}
+
+async function share(title, url) {
+  try {
+    if (navigator.share) await navigator.share({ title, url });
+    else { await navigator.clipboard.writeText(url); toast('Lien copié'); }
+  } catch { /* partage annulé */ }
+}
+
+/* Images chargées seulement à l'approche de l'écran ; sans adresse de référent (certains sites bloquent sinon). */
+const lazyIO = 'IntersectionObserver' in window ? new IntersectionObserver((entries) => {
+  for (const e of entries) {
+    if (!e.isIntersecting) continue;
+    const img = e.target;
+    lazyIO.unobserve(img);
+    img.src = img.dataset.src;
+  }
+}, { rootMargin: '150% 0px' }) : null;
+function lazy(root) {
+  $$('img[data-src]:not([data-obs])', root).forEach((img) => {
+    img.dataset.obs = '1';
+    img.addEventListener('load', () => img.classList.add('loaded'), { once: true });
+    img.addEventListener('error', () => img.remove(), { once: true });
+    if (lazyIO) lazyIO.observe(img); else img.src = img.dataset.src;
+  });
+}
+
+/* ---------------------------------------------------------------- thèmes et centres d'intérêt */
+function customThemes() {
+  return store.get('custom', []).map((t, i) => ({ ...t, color: CUSTOM_COLORS[i % CUSTOM_COLORS.length], emoji: '✦', custom: true }));
+}
+function allThemes() { return [...state.themes, ...customThemes()]; }
+function themeById(id) { return allThemes().find((t) => t.id === id); }
+function interests() { return new Set(store.get('interests', state.themes.map((t) => t.id)).concat(customThemes().map((t) => t.id))); }
+
+const rxCache = new Map();
+function customRx(t) {
+  const key = t.id + '|' + t.keywords.join(',');
+  if (!rxCache.has(key)) {
+    const parts = t.keywords.map((k) => norm(k.replace(/\*$/, '')).trim()).filter(Boolean)
+      .map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '[a-z0-9]*');
+    rxCache.set(key, parts.length ? new RegExp(' (?:' + parts.join('|') + ')(?= )') : null);
+  }
+  return rxCache.get(key);
+}
+/** Thèmes d'un article : ceux calculés par le robot + vos thèmes personnalisés. */
+function themesOf(a) {
+  if (!a._themes) {
+    const text = norm(a.title + ' ' + a.summary);
+    a._themes = [...a.themes, ...customThemes().filter((t) => customRx(t)?.test(text)).map((t) => t.id)];
+  }
+  return a._themes;
+}
+/** Les 3 articles d'une région, en tenant compte de vos centres d'intérêt et sans répéter une source. */
+function pick(arts, n = PER_REGION) {
+  const fav = interests();
+  const ranked = arts.map((a) => {
+    const th = themesOf(a);
+    const hits = th.filter((t) => fav.has(t)).length;
+    const bonus = hits ? 0.25 + 0.04 * Math.min(hits, 2) : (th.length ? -0.15 : 0);
+    return { a, s: a.score + bonus };
+  }).sort((x, y) => y.s - x.s);
+  const out = [];
+  const sources = new Set();
+  for (const { a } of ranked) {
+    if (sources.has(a.source)) continue;
+    sources.add(a.source);
+    out.push(a);
+    if (out.length === n) break;
+  }
+  return out;
+}
+function chipsHTML(ids, max = 3) {
+  return ids.slice(0, max).map((id) => {
+    const t = themeById(id);
+    return t ? `<span class="chip"><i>${t.emoji}</i>${esc(t.label)}</span>` : '';
+  }).join('');
+}
+
+/* ---------------------------------------------------------------- 1. À la une */
+const feed = { el: null, next: 0, loading: false, io: null, gen: 0 };
+
+async function initFeed() {
+  feed.el = $('#feed');
+  feed.el.innerHTML = '';
+  feed.next = 0;
+  feed.gen++;  // un chargement lancé avant une reconstruction du fil sera ignoré
+  feed.loading = false;
+  feed.io?.disconnect();
+  feed.io = new IntersectionObserver((entries) => {
+    if (entries.some((e) => e.isIntersecting)) loadNextDay();
+  }, { root: feed.el, rootMargin: '300% 0px' });
+  if (!feed.onScroll) {  // sécurité si l'observateur ne se déclenche pas
+    feed.onScroll = () => { if (feed.el.scrollTop + 4 * feed.el.clientHeight > feed.el.scrollHeight) loadNextDay(); };
+    feed.el.addEventListener('scroll', feed.onScroll, { passive: true });
+  }
+  if (!state.index.days.length) {
+    feed.el.innerHTML = '<div class="slide end-slide"><h2>Première édition en préparation</h2><p>Revenez après 10h.</p></div>';
+    return;
+  }
+  await loadNextDay();
+}
+
+async function loadNextDay() {
+  if (feed.loading || feed.next >= state.index.days.length) return;
+  feed.loading = true;
+  const gen = feed.gen;
+  const date = state.index.days[feed.next++];
+  try {
+    const day = await loadDay(date);
+    if (gen !== feed.gen) return;
+    renderDay(day, feed.next === 1);
+  } catch {
+    if (gen !== feed.gen) return;
+    feed.el.insertAdjacentHTML('beforeend', `<div class="slide end-slide"><h2>Hors connexion</h2><p>L'édition du ${esc(dayLabel(date).toLowerCase())} n'a pas pu être chargée.</p><button class="btn" data-action="reload">Réessayer</button></div>`);
+  }
+  feed.loading = false;
+  if (feed.next >= state.index.days.length) {
+    feed.el.insertAdjacentHTML('beforeend', '<div class="slide end-slide"><h2>Vous êtes à jour</h2><p>Il n’y a pas d’édition plus ancienne.<br>La prochaine arrive demain matin à 10h.</p></div>');
+  }
+}
+
+function renderDay(day, isFirst) {
+  const regions = ORDER.map((r) => [r, pick(day.regions[r] || [])]).filter(([, l]) => l.length);
+  const frag = document.createDocumentFragment();
+  const intro = document.createElement('section');
+  intro.className = 'slide intro';
+  const updated = state.index.updated ? new Date(state.index.updated) : null;
+  intro.innerHTML = `
+    <div class="kicker">${esc(cap(fmtLong.format(new Date(day.date + 'T12:00:00'))))}</div>
+    <h2>${isFirst && day.date === todayISO() ? 'L’essentiel du jour' : `L’édition ${day.date === addDays(todayISO(), -1) ? 'd’hier' : 'du ' + esc(fmtShort.format(new Date(day.date + 'T12:00:00')))}`}</h2>
+    <p class="sub">${isFirst && updated ? `Mise à jour ${updated.toDateString() === new Date().toDateString() ? 'aujourd’hui' : 'le ' + esc(fmtShort.format(updated))} à ${esc(fmtTime.format(updated))} · prochaine demain à 10h` : 'Suite de votre fil : les articles de la veille.'}</p>
+    <ol>${regions.map(([r, l]) => `<li style="--rc:${REGIONS[r].color}"><span class="sw"></span>${REGIONS[r].flag} ${REGIONS[r].label}<small>${l.length} article${l.length > 1 ? 's' : ''}</small></li>`).join('')}</ol>
+    <div class="hint"><svg viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></svg>Glissez vers le haut</div>`;
+  frag.append(intro);
+  for (const [r, list] of regions) {
+    list.forEach((a, i) => frag.append(articleSlide(a, r, i, list.length, day.date)));
+  }
+  feed.el.append(frag);
+  lazy(feed.el);
+  // le jour suivant se charge quand on approche de la fin de celui-ci
+  const slides = $$('.slide', feed.el);
+  feed.io.observe(slides[Math.max(0, slides.length - 4)]);
+}
+
+function articleSlide(a, region, i, n, date) {
+  const el = document.createElement('article');
+  el.className = 'slide';
+  el.style.setProperty('--rc', REGIONS[region].color);
+  el.tabIndex = 0;
+  const posts = a.posts?.length || 0;
+  el.innerHTML = `
+    <div class="fallback"><span>${esc(a.source)}</span></div>
+    ${a.image ? `<img class="bg" data-src="${esc(a.image)}" alt="" referrerpolicy="no-referrer" decoding="async">` : ''}
+    <div class="shade"></div>
+    <header class="slide-top">
+      <span class="pill region">${REGIONS[region].flag} ${REGIONS[region].label} · ${i + 1}/${n}</span>
+      <span class="pill">${esc(dayLabel(date))}</span>
+    </header>
+    <div class="slide-body">
+      <div class="meta"><b>${esc(a.source)}</b><span class="dot">${esc(when(a.date))}</span></div>
+      <h2 class="headline">${esc(a.title)}</h2>
+      ${a.summary ? `<p class="dek">${esc(a.summary)}</p>` : ''}
+      <div class="chips">${chipsHTML(themesOf(a))}</div>
+      <div class="cta">Lire l’article<svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></div>
+    </div>
+    <aside class="rail">
+      ${a.coverage > 1 ? `<div title="Sources qui traitent ce sujet"><span class="round"><svg viewBox="0 0 24 24"><use href="#i-layers"/></svg></span>${a.coverage}</div>` : ''}
+      ${posts ? `<div title="Publications sur les réseaux"><span class="round"><svg viewBox="0 0 24 24"><use href="#i-chat"/></svg></span>${posts}</div>` : ''}
+      <button data-share aria-label="Partager"><span class="round"><svg viewBox="0 0 24 24"><use href="#i-share"/></svg></span>Partager</button>
+    </aside>`;
+  el.addEventListener('click', (ev) => {
+    if (ev.target.closest('[data-share]')) { ev.stopPropagation(); share(a.title, a.url); return; }
+    openArticle(a, region);
+  });
+  el.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') openArticle(a, region); });
+  return el;
+}
+
+/* ---------------------------------------------------------------- feuille de détail */
+const sheet = { el: null, body: null, open: false };
+
+function openSheet(html, after) {
+  sheet.body.innerHTML = html;
+  sheet.body.scrollTop = 0;
+  sheet.el.classList.add('open');
+  sheet.el.setAttribute('aria-hidden', 'false');
+  if (!sheet.open) history.pushState({ sheet: true }, '');
+  sheet.open = true;
+  lazy(sheet.body);
+  after?.(sheet.body);
+}
+function closeSheet(fromHistory = false) {
+  if (!sheet.open) return;
+  sheet.open = false;
+  sheet.el.classList.remove('open');
+  sheet.el.setAttribute('aria-hidden', 'true');
+  setTimeout(() => { if (!sheet.open) sheet.body.innerHTML = ''; }, 350); // coupe aussi les vidéos
+  if (!fromHistory && history.state?.sheet) history.back();
+}
+
+function openArticle(a, region) {
+  const r = REGIONS[region];
+  openSheet(`
+    ${a.image ? `<img class="hero" data-src="${esc(a.image)}" alt="" referrerpolicy="no-referrer">` : ''}
+    <div class="sheet-content" style="--rc:${r.color}">
+      <div class="meta"><span class="pill region">${r.flag} ${r.label}</span><b>${esc(a.source)}</b><span class="dot">${esc(cap(fmtLong.format(new Date(a.date))))} à ${esc(fmtTime.format(new Date(a.date)))}</span></div>
+      <h1>${esc(a.title)}</h1>
+      ${a.summary ? `<p class="lead">${esc(a.summary)}</p>` : ''}
+      <div class="chips" style="margin-bottom:18px">${chipsHTML(themesOf(a), 4)}</div>
+      <a class="btn primary" href="${href(a.url)}" target="_blank" rel="noopener">Lire l’article sur ${esc(a.source)}<svg viewBox="0 0 24 24"><use href="#i-ext"/></svg></a>
+      <div class="btn-row"><button class="btn" data-share>Partager<svg viewBox="0 0 24 24"><use href="#i-share"/></svg></button></div>
+      ${a.paywall ? '<p class="small">Ce journal réserve une partie de ses articles à ses abonnés.</p>' : ''}
+      ${a.also?.length ? `<p class="small">Sujet aussi traité par : ${a.also.map(esc).join(', ')}.</p>` : ''}
+      <h3 class="section-title">Sur les réseaux</h3>
+      ${a.posts?.length ? `<div class="posts">${a.posts.map(postHTML).join('')}</div>`
+        : '<p class="small">Aucune publication pertinente des chaînes d’information et créateurs suivis (HugoDécrypte, Ulyces, franceinfo, Le Monde, AFP…) pour l’instant. ACTU vérifie à nouveau chaque matin.</p>'}
+    </div>`, (body) => {
+    $('[data-share]', body).addEventListener('click', () => share(a.title, a.url));
+    bindPosts(body);
+  });
+}
+
+function postHTML(p) {
+  if (p.kind === 'yt') {
+    return `<div class="post">
+      <button class="yt" data-yt="${esc(p.id)}" aria-label="Lire la vidéo ${esc(p.title)}">
+        <img data-src="https://i.ytimg.com/vi/${esc(p.id)}/hqdefault.jpg" alt="" referrerpolicy="no-referrer">
+        <span class="play"><span><svg viewBox="0 0 24 24"><use href="#i-play"/></svg></span></span>
+      </button>
+      <div class="post-info"><div class="who"><b>${esc(p.author)}</b> · YouTube · ${esc(when(p.date))}</div><p>${esc(p.title)}</p></div>
+    </div>`;
+  }
+  return `<div class="post"><div class="post-info">
+      <div class="who">${p.avatar ? `<img data-src="${esc(p.avatar)}" alt="" referrerpolicy="no-referrer">` : ''}<b>${esc(p.author)}</b> · Bluesky · ${esc(when(p.date))}</div>
+      <p>${esc(p.text)}</p>
+      ${p.link && p.link_title ? `<a class="linkcard" href="${href(p.link)}" target="_blank" rel="noopener">${p.thumb ? `<img data-src="${esc(p.thumb)}" alt="" referrerpolicy="no-referrer">` : ''}<span>${esc(p.link_title)}</span></a>` : ''}
+      <a class="open" href="${href(p.url)}" target="_blank" rel="noopener">Voir la publication<svg viewBox="0 0 24 24"><use href="#i-ext"/></svg></a>
+    </div></div>`;
+}
+function ytFrame(id) {
+  // YouTube exige de connaître le site qui intègre la vidéo (sinon « erreur 153 ») : on transmet l'origine.
+  return `<iframe src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(id)}?autoplay=1&playsinline=1&rel=0&origin=${encodeURIComponent(location.origin)}" title="Vidéo YouTube" referrerpolicy="strict-origin-when-cross-origin" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>`;
+}
+function bindPosts(root) {
+  $$('[data-yt]', root).forEach((b) => b.addEventListener('click', () => {
+    const box = document.createElement('div');
+    box.className = 'yt';
+    box.innerHTML = ytFrame(b.dataset.yt);
+    b.replaceWith(box);
+  }, { once: true }));
+}
+
+/* ---------------------------------------------------------------- 2. Explorer */
+const ex = { theme: '', shown: 60, items: [] };
+
+function initExplore() {
+  const regionSel = $('#ex-region');
+  regionSel.innerHTML = '<option value="">Toutes</option>' + ORDER.map((r) => `<option value="${r}">${REGIONS[r].flag} ${REGIONS[r].label}</option>`).join('');
+  renderThemeChips();
+  for (const id of ['ex-period', 'ex-region', 'ex-source', 'ex-sort']) $('#' + id).addEventListener('change', () => { ex.shown = 60; refreshExplore(id === 'ex-period'); });
+  let t;
+  $('#ex-q').addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => { ex.shown = 60; renderExplore(); }, 200); });
+  $('#ex-list').addEventListener('click', (ev) => {
+    const row = ev.target.closest('[data-i]');
+    if (row) { const it = ex.view[+row.dataset.i]; openArticle(it.a, it.region); }
+    if (ev.target.closest('[data-more]')) { ex.shown += 60; renderExplore(); }
+  });
+  refreshExplore(true);
+}
+function renderThemeChips() {
+  const box = $('#ex-themes');
+  box.innerHTML = `<button class="chip" data-theme="" aria-pressed="${!ex.theme}">Tous</button>` +
+    allThemes().map((t) => `<button class="chip" data-theme="${esc(t.id)}" aria-pressed="${ex.theme === t.id}">${t.emoji} ${esc(t.label)}</button>`).join('');
+  box.onclick = (ev) => {
+    const b = ev.target.closest('[data-theme]');
+    if (!b) return;
+    ex.theme = b.dataset.theme;
+    $$('[data-theme]', box).forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    ex.shown = 60;
+    renderExplore();
+  };
+}
+async function refreshExplore(reload) {
+  const list = $('#ex-list');
+  if (reload) {
+    const n = +$('#ex-period').value;
+    const since = addDays(todayISO(), -(n - 1));
+    const dates = state.index.days.filter((d) => d >= since);
+    list.innerHTML = '<p class="status">Chargement…</p>';
+    const days = await Promise.allSettled(dates.map(loadDay));
+    ex.items = [];
+    for (const res of days) {
+      if (res.status !== 'fulfilled') continue;
+      const day = res.value;
+      for (const r of ORDER) {
+        const arts = day.regions[r] || [];
+        const top = new Set(pick(arts).map((a) => a.id));
+        for (const a of arts) ex.items.push({ a, region: r, date: day.date, top: top.has(a.id) });
+      }
+    }
+    const srcSel = $('#ex-source');
+    const current = srcSel.value;
+    const sources = [...new Set(ex.items.map((i) => i.a.source))].sort((x, y) => x.localeCompare(y, 'fr'));
+    srcSel.innerHTML = '<option value="">Toutes</option>' + sources.map((s) => `<option${s === current ? ' selected' : ''}>${esc(s)}</option>`).join('');
+  }
+  renderExplore();
+}
+function renderExplore() {
+  const q = norm($('#ex-q').value).trim();
+  const region = $('#ex-region').value;
+  const source = $('#ex-source').value;
+  const sort = $('#ex-sort').value;
+  let items = ex.items.filter((it) => (!region || it.region === region) && (!source || it.a.source === source) &&
+    (!ex.theme || themesOf(it.a).includes(ex.theme)) && (!q || norm(it.a.title + ' ' + it.a.summary + ' ' + it.a.source).includes(' ' + q)));
+  const order = allThemes().map((t) => t.id);
+  const keyOf = {
+    date: (it) => dayLabel(it.date), 'date-asc': (it) => dayLabel(it.date), score: () => '',
+    source: (it) => it.a.source,
+    theme: (it) => { const t = themeById(themesOf(it.a)[0]); return t ? `${t.emoji} ${t.label}` : 'Autres sujets'; },
+  }[sort];
+  const cmp = {
+    date: (x, y) => y.a.date.localeCompare(x.a.date),
+    'date-asc': (x, y) => x.a.date.localeCompare(y.a.date),
+    score: (x, y) => (y.top - x.top) || (y.a.score - x.a.score),
+    source: (x, y) => x.a.source.localeCompare(y.a.source, 'fr') || y.a.date.localeCompare(x.a.date),
+    theme: (x, y) => {
+      const ix = order.indexOf(themesOf(x.a)[0]), iy = order.indexOf(themesOf(y.a)[0]);
+      return ((ix < 0 ? 99 : ix) - (iy < 0 ? 99 : iy)) || y.a.date.localeCompare(x.a.date);
+    },
+  }[sort];
+  items.sort(cmp);
+  ex.view = items;
+  const list = $('#ex-list');
+  if (!items.length) { list.innerHTML = '<p class="empty">Aucun article ne correspond.<br>Essayez une période plus longue ou un autre thème.</p>'; return; }
+  let html = `<p class="status">${items.length} article${items.length > 1 ? 's' : ''}</p>`;
+  let last = null;
+  items.slice(0, ex.shown).forEach((it, i) => {
+    const k = keyOf(it);
+    if (k && k !== last) { html += `<div class="group-h">${esc(k)}</div>`; last = k; }
+    const r = REGIONS[it.region];
+    html += `<button class="row" data-i="${i}" style="--rc:${r.color}">
+      ${it.a.image ? `<img class="thumb" data-src="${esc(it.a.image)}" alt="" referrerpolicy="no-referrer">` : `<span class="thumb ph">${esc(it.a.source.charAt(0))}</span>`}
+      <span class="txt">
+        <span class="m"><span class="rdot"></span>${r.label} · <b>${esc(it.a.source)}</b> · ${esc(when(it.a.date))}${it.top ? ' · <b style="color:var(--accent)">À la une</b>' : ''}</span>
+        <span class="t">${esc(it.a.title)}</span>
+        <span class="chips">${chipsHTML(themesOf(it.a), 2)}</span>
+      </span></button>`;
+  });
+  if (items.length > ex.shown) html += '<button class="btn more" data-more>Afficher plus</button>';
+  list.innerHTML = html;
+  lazy(list);
+}
+
+/* ---------------------------------------------------------------- 3. Le 20h */
+async function initReplay() {
+  const box = $('#replay-list');
+  box.innerHTML = '<p class="status">Chargement…</p>';
+  let data;
+  try { data = await getJSON('replays.json', true); } catch { box.innerHTML = '<p class="empty">Replays indisponibles hors connexion.</p>'; return; }
+  const jt = (item, cls, name) => item
+    ? `<a class="jt ${cls}" href="${href(item.url)}" target="_blank" rel="noopener">
+        ${item.image ? `<img data-src="${esc(item.image)}" alt="" referrerpolicy="no-referrer">` : ''}
+        <span class="logo">${name}</span>
+        <span class="lbl"><b>Le 20h</b><span>${item.minutes ? item.minutes + ' min · ' : ''}Regarder ↗</span></span></a>`
+    : `<a class="jt ${cls} missing" href="${href(cls === 'tf1' ? data.tf1_page : data.f2_page)}" target="_blank" rel="noopener"><span class="logo">${name}</span>Édition pas encore référencée.<br>Ouvrir la page des replays ↗</a>`;
+  box.innerHTML = data.days.map((d) => `
+    <section>
+      <h2 class="day-h">${esc(dayLabel(d.date))}${d.date === todayISO() || d.date === addDays(todayISO(), -1) ? '' : ''}</h2>
+      <div class="jt-grid">${jt(d.tf1, 'tf1', 'TF1')}${jt(d.f2, 'f2', 'France 2')}</div>
+      ${d.tf1_topics?.length ? `<details class="topics"><summary>Les sujets du 20h de TF1 (${d.tf1_topics.length})</summary>
+        <div class="topic-row">${d.tf1_topics.map((t) => `<a class="topic" href="${href(t.url)}" target="_blank" rel="noopener">
+          ${t.image ? `<img data-src="${esc(t.image)}" alt="" referrerpolicy="no-referrer">` : ''}<b>${esc(t.title)}</b><span>${t.minutes ? t.minutes + ' min' : ''}</span></a>`).join('')}</div></details>` : ''}
+    </section>`).join('') + `
+    <div class="links">
+      <a class="btn" href="${href(data.tf1_page)}" target="_blank" rel="noopener">Tous les replays du 20h sur TF1+</a>
+      <a class="btn" href="${href(data.f2_page)}" target="_blank" rel="noopener">Tous les replays du 20h sur france.tv</a>
+    </div>`;
+  lazy(box);
+  $$('details', box).forEach((d) => d.addEventListener('toggle', () => lazy(d)));
+}
+
+/* ---------------------------------------------------------------- 4. ARTE */
+const arte = { data: null, subject: '', sort: 'date', shown: 0, list: [], io: null };
+
+async function initArte() {
+  const grid = $('#arte-grid');
+  grid.innerHTML = '<p class="status">Chargement des reportages…</p>';
+  try { arte.data = await getJSON('arte.json'); } catch { grid.innerHTML = '<p class="empty">Reportages indisponibles hors connexion.</p>'; return; }
+  const subjects = arte.data.subjects.filter((s) => s.count > 0);
+  const box = $('#arte-subjects');
+  box.innerHTML = `<button class="chip" data-s="" aria-pressed="true">Tous <small>${arte.data.videos.length}</small></button>` +
+    subjects.map((s) => `<button class="chip" data-s="${esc(s.id)}" aria-pressed="false">${esc(s.label)} <small>${s.count}</small></button>`).join('');
+  box.addEventListener('click', (ev) => {
+    const b = ev.target.closest('[data-s]');
+    if (!b) return;
+    arte.subject = b.dataset.s;
+    $$('[data-s]', box).forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    renderArte();
+  });
+  $('#arte-sort').addEventListener('click', (ev) => {
+    const b = ev.target.closest('[data-sort]');
+    if (!b) return;
+    arte.sort = b.dataset.sort;
+    $$('[data-sort]', $('#arte-sort')).forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    renderArte();
+  });
+  let t;
+  $('#arte-q').addEventListener('input', () => { clearTimeout(t); t = setTimeout(renderArte, 200); });
+  grid.addEventListener('click', (ev) => {
+    const c = ev.target.closest('[data-v]');
+    if (c) openVideo(arte.list[+c.dataset.v]);
+  });
+  arte.io = new IntersectionObserver((e) => { if (e[0].isIntersecting) moreArte(); }, { root: $('#view-arte'), rootMargin: '600px 0px' });
+  arte.io.observe($('#arte-more'));
+  renderArte();
+}
+function renderArte() {
+  const q = norm($('#arte-q').value).trim();
+  const sorters = {
+    date: (a, b) => (b.date || '').localeCompare(a.date || ''),
+    views: (a, b) => (b.views || 0) - (a.views || 0),
+    long: (a, b) => b.duration - a.duration,
+  };
+  arte.list = arte.data.videos.filter((v) => (!arte.subject || v.subjects.includes(arte.subject)) &&
+    (!q || norm(v.title + ' ' + (v.program || '') + ' ' + (v.desc || '')).includes(' ' + q))).sort(sorters[arte.sort]);
+  arte.shown = 0;
+  $('#arte-grid').innerHTML = arte.list.length ? '' : '<p class="empty">Aucun reportage ne correspond.</p>';
+  moreArte();
+}
+function moreArte() {
+  if (!arte.data || arte.shown >= arte.list.length) return;
+  const label = Object.fromEntries(arte.data.subjects.map((s) => [s.id, s.label]));
+  const slice = arte.list.slice(arte.shown, arte.shown + 24);
+  const html = slice.map((v, k) => `
+    <button class="vcard" data-v="${arte.shown + k}">
+      <span class="vthumb"><img data-src="https://i.ytimg.com/vi/${esc(v.id)}/mqdefault.jpg" alt="" referrerpolicy="no-referrer"><span class="dur">${duration(v.duration)}</span></span>
+      <span class="vt">${esc(v.title)}</span>
+      <span class="vm">${esc(v.program || v.channel)} · ${v.date ? esc(fmtShort.format(new Date(v.date + 'T12:00:00'))) : ''}${v.views ? ' · ' + fmtNum.format(v.views) + ' vues' : ''}</span>
+      <span class="vm">${v.subjects.map((s) => esc(label[s] || s)).join(' · ')}</span>
+    </button>`).join('');
+  arte.shown += slice.length;
+  const grid = $('#arte-grid');
+  grid.insertAdjacentHTML('beforeend', html);
+  lazy(grid);
+}
+function openVideo(v) {
+  openSheet(`
+    <div class="player">${ytFrame(v.id)}</div>
+    <div class="sheet-content">
+      <div class="meta"><b>${esc(v.program || v.channel)}</b><span class="dot">${duration(v.duration)}</span>${v.date ? `<span class="dot">${esc(fmtShort.format(new Date(v.date + 'T12:00:00')))}</span>` : ''}</div>
+      <h1>${esc(v.title)}</h1>
+      ${v.desc ? `<p class="lead">${esc(v.desc)}</p>` : ''}
+      <a class="btn" href="https://www.youtube.com/watch?v=${esc(v.id)}" target="_blank" rel="noopener">Ouvrir dans YouTube<svg viewBox="0 0 24 24"><use href="#i-ext"/></svg></a>
+    </div>`);
+}
+
+/* ---------------------------------------------------------------- 5. Recherche */
+const rs = { curated: null, theme: '' };
+const OA_SELECT = 'id,display_name,publication_year,authorships,primary_location,cited_by_count,doi,open_access,language,abstract_inverted_index';
+
+async function initResearch() {
+  $('#rs-form').addEventListener('submit', (ev) => { ev.preventDefault(); $('#rs-q').blur(); runSearch(); });
+  for (const id of ['rs-lang', 'rs-sort', 'rs-since']) $('#' + id).addEventListener('change', () => { if ($('#rs-q').value.trim()) runSearch(); });
+  $('#rs-q').addEventListener('search', () => { if (!$('#rs-q').value.trim()) renderCurated(); });
+  try { rs.curated = await getJSON('research.json'); } catch { rs.curated = null; }
+  renderCurated();
+}
+function paperHTML(p) {
+  const link = p.pdf || p.url;
+  const lang = (p.lang || '').slice(0, 2).toUpperCase();
+  return `<article class="paper">
+    <a class="t" href="${href(link)}" target="_blank" rel="noopener">${esc(p.title)}</a>
+    <div class="m">${esc(p.authors || 'Auteurs non précisés')}${p.year ? ' · ' + p.year : ''}${p.venue ? ' · <i>' + esc(p.venue) + '</i>' : ''}</div>
+    <div class="badges">${p.cited != null ? `<span class="badge">Cité ${fmtNum.format(p.cited)} fois</span>` : ''}${p.pdf ? '<span class="badge oa">Accès libre</span>' : ''}${lang ? `<span class="badge">${lang}</span>` : ''}<span class="badge">${esc(p.src)}</span></div>
+    ${p.abstract ? `<details><summary>Résumé</summary><p>${esc(p.abstract)}</p></details>` : ''}
+    <div class="acts">${p.pdf ? `<a href="${href(p.pdf)}" target="_blank" rel="noopener">Lire le texte<svg viewBox="0 0 24 24"><use href="#i-ext"/></svg></a>` : ''}${p.url && p.url !== p.pdf ? `<a href="${href(p.url)}" target="_blank" rel="noopener">Fiche de l’article<svg viewBox="0 0 24 24"><use href="#i-ext"/></svg></a>` : ''}</div>
+  </article>`;
+}
+function renderCurated() {
+  const box = $('#rs-results');
+  const c = rs.curated;
+  if (!c) { box.innerHTML = '<p class="empty">Tapez des mots-clés pour chercher parmi des millions de publications scientifiques (OpenAlex, HAL).</p>'; return; }
+  const ids = Object.keys(c.themes).filter((id) => c.themes[id].length);
+  if (!rs.theme || !ids.includes(rs.theme)) rs.theme = ids[0];
+  const upd = new Date(c.updated);
+  box.innerHTML = `
+    <p class="status">Sélection du trimestre · mise à jour le ${esc(fmtShort.format(upd))} · prochaine le ${esc(fmtShort.format(new Date(c.next + 'T12:00:00')))}</p>
+    <div class="chips scroll-x" id="rs-themes" style="margin-bottom:6px">${ids.map((id) => { const t = themeById(id); return `<button class="chip filters-chip" data-t="${id}" aria-pressed="${id === rs.theme}">${t ? t.emoji + ' ' + esc(t.label) : id}</button>`; }).join('')}</div>
+    <div id="rs-curated"></div>`;
+  const draw = () => {
+    let html = '', last = '';
+    for (const p of c.themes[rs.theme]) {
+      if (p.group !== last) { html += `<div class="group-h">${esc(p.group)}</div>`; last = p.group; }
+      html += paperHTML(p);
+    }
+    $('#rs-curated').innerHTML = html;
+  };
+  $('#rs-themes').addEventListener('click', (ev) => {
+    const b = ev.target.closest('[data-t]');
+    if (!b) return;
+    rs.theme = b.dataset.t;
+    $$('[data-t]', $('#rs-themes')).forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    draw();
+  });
+  draw();
+}
+function oaAbstract(inv) {
+  if (!inv) return '';
+  const words = [];
+  for (const [w, ps] of Object.entries(inv)) for (const p of ps) words[p] = w;
+  const s = words.filter(Boolean).join(' ');
+  return s.length > 600 ? s.slice(0, 600).replace(/\s\S*$/, '') + '…' : s;
+}
+async function searchOpenAlex(q, lang, sort, since) {
+  const clean = q.replace(/[,|:]/g, ' ').trim();
+  const f = ['type:article|review', lang ? 'language:' + lang : 'language:fr|en', `to_publication_date:${todayISO()}`];
+  if (since) f.push(`from_publication_date:${since}-01-01`);
+  let url = 'https://api.openalex.org/works?per_page=25&select=' + OA_SELECT;
+  if (sort === 'relevance') url += `&search=${encodeURIComponent(clean)}&filter=${f.join(',')}`;
+  else if (sort === 'cited') url += `&filter=title.search:${encodeURIComponent(clean)},${f.join(',')}&sort=cited_by_count:desc`;
+  else url += `&filter=title_and_abstract.search:${encodeURIComponent(clean)},${f.join(',')}&sort=publication_date:desc`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('OpenAlex ' + res.status);
+  const d = await res.json();
+  return d.results.map((w) => ({
+    title: w.display_name, year: w.publication_year, cited: w.cited_by_count, lang: w.language, src: 'OpenAlex',
+    authors: (w.authorships || []).slice(0, 3).map((a) => a.author?.display_name).filter(Boolean).join(', ') + ((w.authorships || []).length > 3 ? ' et al.' : ''),
+    venue: w.primary_location?.source?.display_name, url: w.doi || w.primary_location?.landing_page_url || w.id,
+    pdf: w.open_access?.oa_url, abstract: oaAbstract(w.abstract_inverted_index),
+  }));
+}
+async function searchHAL(q, lang, sort, since) {
+  const params = new URLSearchParams({ q, wt: 'json', rows: '10', fl: 'title_s,authFullName_s,producedDateY_i,journalTitle_s,uri_s,doiId_s,abstract_s,fileMain_s,language_s' });
+  params.append('fq', 'docType_s:(ART OR COMM OR OUV OR COUV)');
+  if (lang) params.append('fq', 'language_s:' + lang);
+  params.append('fq', `producedDateY_i:[${since || '*'} TO ${new Date().getFullYear()}]`);
+  if (sort === 'recent') params.set('sort', 'producedDate_tdate desc');
+  const res = await fetch('https://api.archives-ouvertes.fr/search/?' + params);
+  if (!res.ok) throw new Error('HAL ' + res.status);
+  const d = await res.json();
+  return d.response.docs.map((x) => ({
+    title: (x.title_s || [''])[0], year: x.producedDateY_i, cited: null, lang: (x.language_s || [''])[0], src: 'HAL',
+    authors: (x.authFullName_s || []).slice(0, 3).join(', ') + ((x.authFullName_s || []).length > 3 ? ' et al.' : ''),
+    venue: x.journalTitle_s, url: x.doiId_s ? 'https://doi.org/' + x.doiId_s : x.uri_s, pdf: x.fileMain_s,
+    abstract: ((x.abstract_s || [''])[0] || '').slice(0, 600),
+  }));
+}
+async function searchCrossref(q) {
+  const res = await fetch(`https://api.crossref.org/works?query.bibliographic=${encodeURIComponent(q)}&rows=20&select=title,author,issued,container-title,is-referenced-by-count,DOI,abstract`);
+  if (!res.ok) throw new Error('Crossref ' + res.status);
+  const d = await res.json();
+  return d.message.items.map((w) => ({
+    title: (w.title || [''])[0], year: w.issued?.['date-parts']?.[0]?.[0], cited: w['is-referenced-by-count'], lang: '', src: 'Crossref',
+    authors: (w.author || []).slice(0, 3).map((a) => [a.given, a.family].filter(Boolean).join(' ')).join(', '),
+    venue: (w['container-title'] || [])[0], url: 'https://doi.org/' + w.DOI, pdf: null,
+    abstract: (w.abstract || '').replace(/<[^>]+>/g, ' ').slice(0, 600),
+  }));
+}
+let searchSeq = 0;
+async function runSearch() {
+  const q = $('#rs-q').value.trim();
+  if (!q) { renderCurated(); return; }
+  const box = $('#rs-results');
+  const seq = ++searchSeq;
+  const lang = $('#rs-lang').value, sort = $('#rs-sort').value, since = $('#rs-since').value;
+  box.innerHTML = '<p class="status">Recherche en cours…</p>';
+  const [oa, hal] = await Promise.allSettled([searchOpenAlex(q, lang, sort, since), searchHAL(q, lang, sort, since)]);
+  let found = oa.status === 'fulfilled' ? oa.value : [];
+  if (oa.status !== 'fulfilled') { try { found = await searchCrossref(q); } catch { /* rien */ } }
+  if (hal.status === 'fulfilled') found = found.concat(hal.value);
+  const seen = new Set();
+  let papers = found.filter((p) => {
+    const key = norm(p.title).slice(0, 70);
+    if (!p.title || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  if (sort === 'recent') papers.sort((a, b) => (b.year || 0) - (a.year || 0));
+  if (seq !== searchSeq) return;
+  box.innerHTML = papers.length
+    ? `<p class="status">${papers.length} résultats pour « ${esc(q)} »</p>` + papers.map(paperHTML).join('')
+    : `<p class="empty">Aucun résultat pour « ${esc(q)} ».<br>Essayez d’autres mots, en français ou en anglais.</p>`;
+}
+
+/* ---------------------------------------------------------------- réglages */
+function openSettings() {
+  const fav = interests();
+  const custom = customThemes();
+  const idx = state.index;
+  openSheet(`<div class="settings">
+    <h2>Réglages</h2>
+    <h3>Mes centres d’intérêt</h3>
+    <p class="small">Les articles de ces thèmes passent en priorité dans « À la une ».</p>
+    <div class="chips" id="st-fav">${state.themes.map((t) => `<button class="chip" data-id="${t.id}" aria-pressed="${fav.has(t.id)}">${t.emoji} ${esc(t.label)}</button>`).join('')}</div>
+    <h3>Mes thèmes personnalisés</h3>
+    <div id="st-custom">${custom.map((t, i) => `<div class="custom"><div><b>✦ ${esc(t.label)}</b><small>${esc(t.keywords.join(', '))}</small></div><button class="icon-btn" data-del="${i}" aria-label="Supprimer ${esc(t.label)}"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>`).join('') || '<p class="small">Aucun pour l’instant.</p>'}</div>
+    <form id="st-form">
+      <label class="field"><span>Nom du thème</span><input id="st-name" placeholder="ex. Climat" required maxlength="30"></label>
+      <label class="field"><span>Mots-clés, séparés par des virgules (français, anglais ou espagnol)</span><input id="st-kw" placeholder="ex. climat, CO2, réchauffement, climate" required></label>
+      <button class="btn" style="width:100%">Ajouter ce thème</button>
+    </form>
+    <h3>Mises à jour</h3>
+    <div class="kv"><span>Dernière édition</span><span>${idx?.updated ? esc(cap(fmtLong.format(new Date(idx.updated)))) + ' à ' + esc(fmtTime.format(new Date(idx.updated))) : '—'}</span></div>
+    <div class="kv"><span>Prochaine</span><span>Chaque matin à 10h</span></div>
+    <div class="kv"><span>Recherche scientifique</span><span>Tous les 3 mois</span></div>
+    <div class="btn-row"><button class="btn" data-action="reload">Actualiser maintenant</button></div>
+    <h3>Stockage</h3>
+    <p class="small">ACTU ne garde sur ce téléphone que vos réglages (quelques octets) et la coquille de l’application (≈ 100 Ko) pour démarrer vite. Articles, vidéos et images sont lus en direct sur internet.</p>
+    <div class="btn-row"><button class="btn" id="st-clear">Vider le cache</button></div>
+    <h3>Installer sur l’iPhone</h3>
+    <p class="small">Dans Safari : touchez le bouton Partager, puis « Sur l’écran d’accueil ». L’icône ACTU apparaît comme une application.</p>
+    <h3>À propos</h3>
+    <p class="small">Sélection automatique parmi ${'≈ 90'} flux de journaux (France ; Europe en anglais ; États-Unis ; Amérique latine en espagnol), publications YouTube et Bluesky des médias et créateurs d’information, replays TF1+ et france.tv, ARTE sur YouTube, OpenAlex et HAL. Version ${VERSION}.</p>
+  </div>`, (body) => {
+    $('#st-fav', body).addEventListener('click', (ev) => {
+      const b = ev.target.closest('[data-id]');
+      if (!b) return;
+      const on = b.getAttribute('aria-pressed') !== 'true';
+      b.setAttribute('aria-pressed', String(on));
+      store.set('interests', $$('#st-fav [aria-pressed="true"]', body).map((x) => x.dataset.id));
+      state.dirty = true;
+    });
+    $('#st-custom', body).addEventListener('click', (ev) => {
+      const b = ev.target.closest('[data-del]');
+      if (!b) return;
+      const list = store.get('custom', []);
+      list.splice(+b.dataset.del, 1);
+      store.set('custom', list);
+      state.dirty = true;
+      openSettings();
+    });
+    $('#st-form', body).addEventListener('submit', (ev) => {
+      ev.preventDefault();
+      const label = $('#st-name', body).value.trim();
+      const keywords = $('#st-kw', body).value.split(/[,;]+/).map((k) => k.trim()).filter(Boolean);
+      if (!label || !keywords.length) return;
+      const list = store.get('custom', []);
+      list.push({ id: 'c-' + norm(label).trim().replace(/ /g, '-') + '-' + Date.now().toString(36), label, keywords });
+      store.set('custom', list);
+      state.dirty = true;
+      toast(`Thème « ${esc(label)} » ajouté`);
+      openSettings();
+    });
+    $('#st-clear', body).addEventListener('click', async () => {
+      try { for (const k of await caches.keys()) await caches.delete(k); } catch { /* pas de cache */ }
+      location.reload();
+    });
+  });
+}
+/** Après un changement de réglages : on reconstruit les vues concernées. */
+function applySettings() {
+  if (!state.dirty) return;
+  state.dirty = false;
+  for (const a of allLoadedArticles()) delete a._themes;
+  initFeed();
+  if (state.inited.has('explore')) { renderThemeChips(); refreshExplore(true); }
+}
+function* allLoadedArticles() {
+  for (const d of state.loaded.values()) for (const r of Object.values(d.regions)) yield* r;
+}
+
+/* ---------------------------------------------------------------- onglets */
+const INIT = { explore: initExplore, replay: initReplay, arte: initArte, research: initResearch };
+function showTab(name) {
+  $$('.view').forEach((v) => v.classList.toggle('active', v.id === 'view-' + name));
+  $$('.tabbar button').forEach((b) => (b.dataset.tab === name ? b.setAttribute('aria-current', 'page') : b.removeAttribute('aria-current')));
+  if (INIT[name] && !state.inited.has(name)) { state.inited.add(name); INIT[name](); }
+}
+
+/* ---------------------------------------------------------------- démarrage */
+async function checkUpdate() {
+  try {
+    const idx = await getJSON('index.json', true);
+    if (state.index && idx.updated !== state.index.updated) {
+      toast('Nouvelle édition disponible <button data-action="reload">Afficher</button>', 0);
+    }
+  } catch { /* hors connexion */ }
+}
+
+async function boot() {
+  sheet.el = $('#sheet');
+  sheet.body = $('#sheet-body');
+  document.addEventListener('click', (ev) => {
+    const act = ev.target.closest('[data-action]')?.dataset.action;
+    if (act === 'close') closeSheet();
+    else if (act === 'settings') openSettings();
+    else if (act === 'reload') location.reload();
+    else if (act === 'hide-install') { $('#install').hidden = true; store.set('installHidden', true); }
+    const tab = ev.target.closest('[data-tab]')?.dataset.tab;
+    if (tab) {
+      if (tab === 'feed' && $('#view-feed').classList.contains('active')) feed.el.scrollTo({ top: 0, behavior: 'smooth' });
+      showTab(tab);
+    }
+  });
+  window.addEventListener('popstate', () => { if (sheet.open) { closeSheet(true); applySettings(); } });
+  document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') closeSheet(); });
+  sheet.el.addEventListener('transitionend', () => { if (!sheet.open) applySettings(); });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && Date.now() - state.lastCheck > 20 * 60e3) { state.lastCheck = Date.now(); checkUpdate(); }
+  });
+
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const standalone = navigator.standalone || matchMedia('(display-mode: standalone)').matches;
+  if (isIOS && !standalone && !store.get('installHidden', false)) $('#install').hidden = false;
+
+  try {
+    const [index, themes] = await Promise.all([getJSON('index.json', true), fetch('themes.json').then((r) => r.json())]);
+    state.index = index;
+    state.themes = themes;
+  } catch {
+    $('#feed').innerHTML = '<div class="slide end-slide"><h2>Pas de connexion</h2><p>ACTU a besoin d’internet pour charger les articles.</p><button class="btn" data-action="reload">Réessayer</button></div>';
+    return;
+  }
+  initFeed();
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+
+boot();
