@@ -1,15 +1,18 @@
-"""Schéma « En un coup d'œil » de chaque article : où, qui, quoi, liens, pour comprendre, et après.
+"""Schéma « En un coup d'œil » de chaque article : où, quand, qui, quoi, comment, pourquoi, liens, pour comprendre, et après.
 
 Entièrement gratuit (aucune intelligence artificielle payante) : on repère dans le texte les acteurs les plus cités,
-le type d'action, les acteurs cités ensemble et les phrases qui annoncent une suite ; context.py ajoute les fiches
-Wikipédia et les articles liés des jours précédents. Les textes du schéma reprennent des phrases de l'article :
-comme les textes complets, ces schémas sont chiffrés avec votre code de lecture → app/data/stories/AAAA-MM-JJ.bin
+le type d'action, les acteurs cités ensemble ; synthesis.py choisit les phrases qui résument, datent, expliquent ;
+profiles.py décrit le pays (pouvoir, économie, société) et context.py ajoute les fiches Wikipédia et les articles liés.
+Les textes du schéma reprennent des phrases de l'article : comme les textes complets, ces schémas sont chiffrés avec
+votre code de lecture → app/data/stories/AAAA-MM-JJ.bin
 """
 import os
 import re
 from datetime import timedelta
 
 import context
+import profiles
+import synthesis
 import translate
 from common import DATA, STOP, idf_table, log, norm, parallel, read_json, strip_accents, tokens
 from config import FEEDS, YOUTUBE_NEWS
@@ -65,7 +68,7 @@ ACTION_WORDS = [  # en cas d'égalité, le premier de la liste l'emporte
     ("attaque", "attaque* frappe* bombard* tue tues killed kill* airstrike* attack* ataca* ataque* atentado* bombardea* drone* missile* "
      "offensive* tir tirs blesse* par_balle shooting* shot herido* balacera"),
     ("negocie", "negocie* negocia* negotiat* rencontre* sommet* summit* cumbre* discute* talks pourparlers meet* meeting reune* dialogo*"),
-    ("manifeste", "manifest* greve* protest* marcha* huelga* mobilis* rassembl* petition*"),
+    ("manifeste", "manifest* greve* protest* marcharon marchas huelga* mobilis* rassembl* petition*"),
     ("avertit", "alerte* met_en_garde menace* warn* threat* advierte* amenaza* alarme*"),
     ("decouvre", "decouv* discover* descubr* etude* study estudio revele* reveals"),
     ("hausse", "hausse* augmente* bondit* grimpe* record* rise* rising surge* sube* alza* aumenta* raised raises"),
@@ -113,15 +116,21 @@ CONS_RX = [(k, _rx(w)) for k, w in CONSEQ_KIND]
 
 
 JUNK_RE = re.compile(r"^\s*([-•▶►·]|lire aussi|à lire|a lire|read more|related|lea también|lee también|ver también|te puede interesar|"
-                     r"newsletter|abonnez|suscr[ií]bete|publicit[ée]|photo ?:|cr[ée]dit)", re.I)
+                     r"newsletter|abonnez|suscr[ií]bete|publicit[ée]|photo ?:|cr[ée]dit|editor['’]s note|this is a developing story|"
+                     r"nota del editor|note de la r[ée]daction|mise à jour|update:)", re.I)
+EDITOR_RE = re.compile(r"^(editor['’]s note|note de la r[ée]daction|nota del editor)\s*:?[^.]*\.\s*(this is a developing story[^.]*\.\s*)?", re.I)
 
 
 def sentences(text):
-    out = []
+    out, seen = [], set()
     for para in (text or "").split("\n"):
         if JUNK_RE.match(para):
             continue
-        out += [s.strip() for s in SENT_RE.split(para) if len(s.strip()) > 30]
+        for s in SENT_RE.split(EDITOR_RE.sub("", para)):
+            s = s.strip()
+            if len(s) > 30 and not JUNK_RE.match(s) and norm(s) not in seen:  # le chapeau est parfois répété dans le texte
+                seen.add(norm(s))
+                out.append(s)
     return out
 
 
@@ -289,9 +298,13 @@ def central(sents, title, k=3):
     return [sents[i] for i in top]
 
 
-def make_story(a, region, sents, date_label):
+def story_country(a, region):
+    return (a.get("scene") or {}).get("country") or {"fr": "fr", "us": "us", "eu": "eu"}.get(region, "latam")
+
+
+def make_story(a, region, sents, date_label, d, lang="fr", prof=None):
     scene = a.get("scene") or {}
-    country = scene.get("country") or {"fr": "fr", "us": "us", "eu": "eu"}.get(region, "latam")
+    country = story_country(a, region)
     actors = find_actors(a["title"], sents[:60], country, title_case=region in ("eu", "us"))
     cast = scene.get("cast") or ["citizen"]
     for i, act in enumerate(actors):
@@ -319,30 +332,46 @@ def make_story(a, region, sents, date_label):
                 if not link_sentence:
                     link_sentence = both[0]
     links = [{k: v for k, v in l.items() if k != "_n"} for l in sorted(links, key=lambda l: -l["_n"])[:3]]
-    # conséquences : phrases qui annoncent une suite
-    cons = [s for s in sents[1:] if CONSEQ_CUES.search(s)]
-    cons = central(cons, a["title"], 2) if len(cons) > 2 else cons[:2]
+    # synthèse : chaque phrase de l'article ne sert qu'une fois (quoi, pourquoi, comment, et après, qui, quand)
+    p = synthesis.Picker(sents, a["title"], lang)
+    quoi = synthesis.summary(p) or a["title"]
+    causes = synthesis.why(p, lang)
+    means = synthesis.how(p, lang)
+    cons = p.take(p.best(2, CONSEQ_CUES.search, start=1))
     if not cons and len(sents) >= 5:
-        cons = central(sents[len(sents) // 2:], a["title"], 1)
-    consequences = [{"text": shorten(s, 160), "kind": best_kind(s, CONS_RX, "autre")} for s in cons] or \
+        cons = p.take(p.best(1, start=len(sents) // 2))
+    consequences = [{"text": shorten(s, 200), "kind": best_kind(s, CONS_RX, "autre")} for s in cons] or \
                    [{"text": "Aucune suite annoncée dans l’article pour l’instant.", "kind": "autre"}]
-    key = central(sents, a["title"], 2)
+    for act in actors:
+        does = synthesis.role_of(p, act)
+        if does:
+            act["does"] = does
+    when = synthesis.timeline(p, d)
     city = (scene.get("city") or "").title()
     pname = PLACE_NAMES.get(country, "")
     place = f"{city} ({pname})" if city and pname and city.lower() != pname.lower() else (city or pname or "Dans le monde")
     captions = {
         "ou": f"{place} · {date_label}",
         "qui": "En jeu : " + ", ".join(x["name"] for x in actors[:4]) + ".",
-        "quoi": shorten(" ".join(key) if key else a["title"], 260),
+        "quoi": quoi,
         "liens": shorten(link_sentence, 220) if link_sentence else "Sujet aussi traité par " + (", ".join(a.get("also", [])[:3]) or a["source"]) + ".",
         "consequences": " ".join(c["text"] for c in consequences),
     }
-    return {
-        "place": {"country": country, "city": scene.get("city", ""), "label": place, "date": date_label},
+    story = {
+        "place": {"country": country, "city": scene.get("city", ""), "label": place, "date": date_label, "iso": d.isoformat()},
         "actors": actors,
         "action": {"who": who, "verb": VERB_LABEL.get(kind, "ACTU"), "kind": kind, "target": target},
         "links": links, "consequences": consequences, "captions": captions,
+        "when": when, "how": means, "profile": country if prof else None,
     }
+    if causes:
+        story["why"] = {"facts": causes}
+    elif len(sents) < 5:  # seulement le résumé : trop peu pour des hypothèses sérieuses
+        story["why"] = {"none": True}
+    else:
+        hyp = synthesis.hypotheses(story, scene.get("topic"), prof)
+        story["why"] = {"hyp": hyp} if hyp else {"none": True}
+    return story
 
 
 PLACE_NAMES = {"fr": "France", "us": "États-Unis", "gb": "Royaume-Uni", "de": "Allemagne", "ru": "Russie", "ua": "Ukraine", "cn": "Chine",
@@ -360,6 +389,8 @@ def update(days, tr=None):
         return
     key = key_from(code)
     wiki = context.Wiki()
+    places = profiles.Profiles()
+    places.prepare(story_country(a, reg) for d in days if (ed := read_json(day_path(d))) for reg, arts in ed["regions"].items() for a in arts)
     total = 0
     for d in days:
         ed = read_json(day_path(d))
@@ -378,7 +409,8 @@ def update(days, tr=None):
         def one(item):
             reg, a = item
             sents = sentences(texts.get(a["id"], "")) or sentences(a["summary"]) or [a["title"]]
-            story = make_story(a, reg, sents, date_label)
+            country = story_country(a, reg)
+            story = make_story(a, reg, sents, date_label, d, translate.source_lang(reg, a), places.get(country))
             return a["id"], context.enrich(wiki, story, a, reg, sents, pool, idf, d)
 
         items = [(reg, a) for reg, arts in ed["regions"].items() for a in arts]
@@ -399,5 +431,6 @@ def update(days, tr=None):
             spath.write_bytes(encrypt(key, stories))
         total += len(stories)
     wiki.save()
+    places.save()
     context.report(wiki, total)
     log(f"Schémas « En un coup d'œil » : {total} articles résumés")

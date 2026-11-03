@@ -15,7 +15,7 @@ puis Partager → « Sur l'écran d'accueil ». Adresse : https://thias-user.git
 | **À la une** | Défilement plein écran avec, pour chaque article, une petite scène pixel art animée qui résume le sujet (décor, personnages en costume, drapeaux). 3 articles France (journaux français), 3 Europe (journaux européens en anglais), 3 États-Unis (journaux américains), 3 Amérique latine (en espagnol, presse d'Espagne ou d'Amérique latine). Puis les éditions de la veille, de l'avant-veille, etc. Chaque article : titre, source, date, résumé, lien, et à la fin les publications YouTube/Bluesky des médias et créateurs (HugoDécrypte, Ulyces, franceinfo, Le Monde, AFP…) qui en parlent. |
 | **Explorer** | Tous les articles collectés, à trier par thème, date, source ou importance, et à filtrer par région, période ou mot-clé. |
 | **Le 20h** | Les journaux de 20h de TF1 (TF1+) et de France 2 (france.tv) des 14 derniers jours, avec les sujets du JT de TF1. |
-| **ARTE** | Les reportages en accès libre sur les chaînes YouTube d'ARTE, classés par sujet (géopolitique, histoire, philosophie, art…) et par région du monde. |
+| **ARTE** | Les documentaires et reportages en accès libre sur les chaînes YouTube d'ARTE (sans concerts ni films), classés par sujet (géopolitique, histoire, psychologie et quête de sens, philosophie, art…) et par région du monde. La recherche porte sur les titres, les descriptions complètes et les mots-clés des vidéos, tolère pluriels et petites fautes, et classe par pertinence. Miniatures en haute définition. |
 | **Recherche** | Recherche par mots-clés dans les publications scientifiques (OpenAlex, HAL), et une sélection par thème renouvelée tous les 3 mois. |
 
 Dans **Réglages** (roue dentée) : régions affichées, leur ordre et le **nombre d'articles par région (jusqu'à tous)**, la **traduction en
@@ -41,17 +41,22 @@ traduction automatique : fiable pour comprendre l'essentiel, moins élégante qu
 
 ## En un coup d'œil
 
-À la fin de chaque article, un **schéma de pensée** animé, au format rectangle, résume l'information case par case :
-**Où ?** (le lieu, avec sa fiche), **Qui ?** (chaque acteur, avec sa photo et sa présentation tirées de Wikipédia),
-**Quoi ?** (l'action et les phrases clés de l'article), **Liens** (qui s'oppose à qui, qui soutient qui), **Pour comprendre**
-(une page Wikipédia sur le sujet et les articles du même sujet publiés dans ACTU avant ou après) et **Et après ?** (les suites
-annoncées). La caméra s'approche de chaque case, puis montre le schéma entier ; touchez une case pour l'agrandir, et le bouton
-plein écran affiche le schéma sur tout le téléphone (en paysage).
+À la fin de chaque article, un **schéma de pensée** animé, au format rectangle, résume l'information case par case, de façon
+à se lire sans l'article : **Où ?** (le lieu, avec sa fiche), **Quand ?** (les dates citées, les articles du même sujet publiés
+dans ACTU avant ou après, et le jour de l'article), **Qui ?** (chaque acteur : qui il est, d'après Wikipédia, et ce qu'il fait
+dans cette histoire), **Quoi ?** (l'essentiel en quelques phrases), **Comment ?** (les moyens, le déroulé, un chiffre clé),
+**Pourquoi ?** (les causes données par les sources ; si elles n'en donnent pas, trois hypothèses, présentées comme telles),
+**Liens** (qui s'oppose à qui, qui soutient qui), **Pour comprendre** (une page Wikipédia sur le sujet quand elle apporte
+quelque chose, et le pays en bref : régime et dirigeants, niveau de vie, croissance, inflation, chômage, inégalités, avec une
+lecture d'ensemble) et **Et après ?** (les suites annoncées). La caméra s'approche de chaque case, puis montre le schéma entier ;
+touchez une case pour l'agrandir. Le bouton plein écran affiche le schéma sur tout le téléphone, droit ; le bouton « Paysage »
+le fait pivoter.
 
-Tout est gratuit, sans clé ni service payant : le robot repère les acteurs et les relations dans le texte, puis vérifie chaque
-fiche Wikipédia contre l'article avant de la garder (mieux vaut pas de fiche qu'une fiche fausse). Les fiches sont gardées 30 jours
-dans le cache du robot. Le schéma est chiffré avec le code de lecture ; sans code, l'application en fait une version courte
-à partir du titre et du résumé.
+Tout est gratuit, sans clé ni service payant : le robot repère les acteurs, les dates, les causes et les relations dans le texte,
+puis vérifie chaque fiche Wikipédia contre l'article avant de la garder (mieux vaut pas de fiche qu'une fiche fausse ; les
+définitions évidentes, comme « école maternelle », sont écartées). Le pays en bref vient de la Banque mondiale et de Wikidata,
+relus chaque semaine. Les fiches sont gardées dans le cache du robot. Le schéma est chiffré avec le code de lecture ; sans code,
+l'application en fait une version courte à partir du titre et du résumé, avec le pays en bref.
 
 ## Comment ça marche
 

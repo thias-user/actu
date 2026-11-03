@@ -29,6 +29,20 @@ def split(paragraph):
 
 
 TR_VERSION = 4
+
+
+def prepare():
+    """Télécharge les modèles OPUS-MT et les convertit pour CTranslate2 (une fois : le résultat est mis en cache)."""
+    import ctranslate2.converters
+    for src, name in OPUS.items():
+        out = MODELS / f"opus-{src}-fr"
+        if (out / "model.bin").exists():
+            continue
+        log(f"Préparation du modèle de traduction {name}")
+        ctranslate2.converters.TransformersConverter(name, copy_files=["source.spm", "target.spm"]).convert(
+            str(out), quantization="int8", force=True)
+
+
 WORD_RE = re.compile(r"[A-Za-zÀ-ÿ][\w'’-]*")
 
 
@@ -219,36 +233,41 @@ def update(days, tr):
 def translate_stories(tr, stories, langs):
     """Traduit les textes des schémas « En un coup d'œil » (phrases de l'article, fiches Wikipédia en langue étrangère)
     → champ "tr" de chaque schéma ; l'application l'affiche quand l'option de traduction est activée."""
-    jobs = {"en": [], "es": []}  # (schéma, chemin, texte)
+    jobs = {"en": [], "es": []}  # (schéma, (rubrique, rang), texte)
     for sid, st in stories.items():
         src = langs.get(sid)
         if src in jobs:
             cap = st.get("captions") or {}
             for k in ("quoi", "liens"):
                 if cap.get(k):
-                    jobs[src].append((st, ("cap", k), cap[k]))
+                    jobs[src].append((st, (k, None), cap[k]))
             for i, c in enumerate(st.get("consequences") or []):
                 jobs[src].append((st, ("cons", i), c["text"]))
+            for i, act in enumerate(st.get("actors") or []):
+                if act.get("does"):
+                    jobs[src].append((st, ("does", i), act["does"]))
+            for i, w in enumerate(st.get("when") or []):
+                jobs[src].append((st, ("when", i), w["t"]))
+            for i, h in enumerate(st.get("how") or []):
+                jobs[src].append((st, ("how", i), h["t"]))
+            for i, f in enumerate((st.get("why") or {}).get("facts") or []):
+                jobs[src].append((st, ("why", i), f))
         for i, act in enumerate(st.get("actors") or []):
             w = act.get("wiki")
             if w and w.get("l") in jobs and w.get("x"):
                 jobs[w["l"]].append((st, ("act", i), w["x"]))
         c = st.get("context")
         if c and c.get("l") in jobs and c.get("x"):
-            jobs[c["l"]].append((st, ("ctx", 0), c["x"]))
+            jobs[c["l"]].append((st, ("ctx", None), c["x"]))
     for src, items in jobs.items():
         if not items or src in tr.failed:
             continue
         for (st, (kind, k), _), text in zip(items, tr.translate([x for _, _, x in items], src)):
             t = st.setdefault("tr", {})
-            if kind == "cap":
-                t[k] = text
-            elif kind == "cons":
-                t.setdefault("cons", {})[str(k)] = text
-            elif kind == "act":
-                t.setdefault("act", {})[str(k)] = text
+            if k is None:
+                t[kind] = text
             else:
-                t["ctx"] = text
+                t.setdefault(kind, {})[str(k)] = text
 
 
 if __name__ == "__main__":

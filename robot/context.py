@@ -193,8 +193,31 @@ def topic(wiki, a, lang, ctx, idf, skip_titles, years, text, names=()):
                 continue  # une personne : son nom complet doit figurer dans l'article
             if len(stems(tokens(c["x"][:600])) & rare) < 2:
                 continue
+            if generic(c, text):
+                continue  # une définition évidente (« École maternelle ») n'aide pas à comprendre
             return wiki.french(c)
     return None
+
+
+GENERIC_WORDS = (r"type|forme|genre|sorte|concept|notion|terme|mot|établissement|etablissement|institution|lieu|bâtiment|batiment|"
+                 r"profession|métier|metier|fonction|activité|activite|pratique|discipline|technique|méthode|methode|outil|objet|"
+                 r"appareil|véhicule|vehicule|aliment|boisson|plat|espèce|espece|animal|plante|matériau|materiau|substance|unité|"
+                 r"unite|kind|class|term|occupation|practice|activity|building|tipo|concepto|término|termino|profesión|profesion|"
+                 r"actividad|práctica|practica|edificio|institución|institucion")
+GENERIC_DESC = re.compile(rf"^({GENERIC_WORDS})\b", re.I)
+GENERIC_DEF = re.compile(rf"^[^.]{{0,90}}?\b(?:est|sont|is|are|es|son)\s+(?:un|une|des|a|an|the|el|la|una|unos|unas)\s+"
+                         rf"(?:\w+\s+)?(?:{GENERIC_WORDS})\b", re.I)
+
+
+def generic(card, text):
+    """Un nom commun (écrit en minuscules dans l'article) défini comme un type de chose : une évidence."""
+    plain = TITLE_PAREN.sub("", card["t"]).strip()
+    words = plain.split()
+    if not words or any(w[:1].isupper() for w in words[1:]) or any(ch.isdigit() for ch in plain) or plain.isupper():
+        return False
+    low = plain[0].lower() + plain[1:]
+    in_lower = bool(re.search(r"(?<![\wÀ-ÿ])" + re.escape(low) + r"(?![\wÀ-ÿ])", text))
+    return in_lower or bool(GENERIC_DESC.match(card.get("d") or "")) or bool(GENERIC_DEF.match(card.get("x") or ""))
 
 
 def related(pool, a, d, idf):

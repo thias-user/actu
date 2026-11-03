@@ -238,7 +238,7 @@ ARTE_CHANNELS = [
     ("Le Dessous des images", "UC4DJ3WmfGvZv6PlKUuA057A", 5, "societe"),
     ("ARTE Évasion", "UCXV7LUI7G1MaKRN18yQ5y7Q", 12, "voyage"),
     ("TRACKS", "UC__Pj66OeDibNZNN__L913g", 8, "art"),
-    ("ARTE Concert", "UC-smeLB9AnOTeypr1YyjJ3A", 20, "musique"),
+    # pas d'ARTE Concert : ni concerts ni films dans l'onglet, seulement des documentaires et reportages
 ]
 # Quelques playlists thématiques d'ARTE (le titre de la playlist aide à classer les vidéos).
 ARTE_PLAYLISTS = [
@@ -260,7 +260,16 @@ ARTE_PLAYLISTS = [
     ("PLCwXWOyIR22vsQOA4DatD9NgPHk8MwH_W", "Peinture et sculpture", "art"),
     ("PLCwXWOyIR22tlrcyx7y9kJFEZlJ_IXpL1", "L'oligarque et le marchand d'art", "art"),
     ("PLCwXWOyIR22uueWT6j4aou2__m5NJxorN", "Miyazaki, l'esprit de la nature", "art"),
-    ("PLCwXWOyIR22ueD2N_4oYNxE-1GKW9JTBW", "Santé mentale", "sante"),
+    ("PLCwXWOyIR22ueD2N_4oYNxE-1GKW9JTBW", "Santé mentale", "psychologie"),
+    ("PLCwXWOyIR22vr-7jggwgMTf7MVoPovCOY", "Unhappy", "psychologie"),
+    ("PLCwXWOyIR22v4XGvxPZ-CKDUFSkyQkZD4", "Il y a de l'amour dans l'air", "psychologie"),
+    ("PLCwXWOyIR22szoCUQwL9z39PA4K8P0Xzg", "La vie en face", "societe"),
+    ("PLCwXWOyIR22tcDY4MC7lvn-Y45pdZ3bmB", "Sexualités en questions", "societe"),
+    ("PLCwXWOyIR22ucBXfrtNRdIsD-wfFiNk-i", "Les idées larges", "philosophie"),
+    ("PLCwXWOyIR22sIf_2LsC_eYkOhXOfaf-Gi", "Square Idée", "philosophie"),
+    # concerts filmés : écartés de l'onglet
+    ("PLCwXWOyIR22thAPq-Qqb2e-z_a2mtPwEW", "LE DOCK - Tous nos lives", "_exclure"),
+    ("PLCwXWOyIR22vouzxyq7fZV_vh3f8k5DfZ", "Replay Live", "_exclure"),
     ("PLCwXWOyIR22sUQ0yWcpNJBYq6GyX3il3D", "Santé – documentaires complets", "sante"),
     ("PLCwXWOyIR22tFizvcqdhBevYNVny82ysn", "Le sucre, pour la douceur et pour le pire", "sante"),
     ("PLCwXWOyIR22vJ2c1vewT9WyDRmsxJqa0A", "Intelligence artificielle", "innovation"),
@@ -275,9 +284,16 @@ ARTE_PLAYLISTS = [
 ARTE_SUBJECTS = [
     ("geopolitique", "Géopolitique", "geopoliti* guerre guerres conflit* frontiere* nato diplomat* ukraine russia china iran israel gaza palestine taiwan middleeast puissances empire empires armee* militaire* nucleaire* terroris* dictateur* dictature* oligarque* putin trump afrique sahel coree mafia* cartel* usa"),
     ("histoire", "Histoire", "histoire historique* siecle* antiquite antique* moyen_age medieval* renaissance revolution* guerre_mondiale 1914 1918 1939 1945 nazi* hitler napoleon roi reine pharaon* egypte_ancienne rome romain* grec* pompei archeolog* colonial* colonisation esclavage memoire patrimoine chateau* tchernobyl mobutu staline guerre_froide"),
+    ("psychologie", "Psychologie & quête de sens", "psycholog* psychanaly* psychiatr* psychique* psy freud jung lacan emotion* "
+     "sentiment* bonheur heureux heureuse anxiete angoisse* peur peurs phobie* solitude depression* deprime* burn_out burnout stress "
+     "traumatism* trauma* resilience deuil fin_de_vie finitude sens_de_la_vie quete_de_sens sens_de_l_existence existentiel* "
+     "identite personnalite* comportement* inconscient reve reves amour amoureux amoureuse couple couples desir jalousie colere honte "
+     "culpabilite empathie altruisme egoisme narciss* manipulat* addiction* dependance* sante_mentale bien_etre meditation sagesse "
+     "spiritualit* intime intimite charge_mentale harcelement estime_de_soi confiance_en_soi introspection nature_humaine "
+     "condition_humaine neuroscience* cerveau_humain"),
     ("philosophie", "Philosophie & idées", "philosoph* pensee penseur* idees morale ethique sagesse liberte verite bonheur conscience existence religion* croyance* dieu spiritu* sacre mythe* mythologie sens_de_la_vie desir amour"),
     ("art", "Art & culture", "art arts artiste* peinture* peintre* sculpt* musee* exposition* oeuvres cinema film films realisat* photograph* architect* litterature ecrivain* roman romans poesie poete* theatre danse bande_dessinee manga* tolkien miyazaki culture culturel* couture"),
-    ("musique", "Musique", "musique* concert* festival* album* chanson* chanteu* rap rock jazz electro orchestre* opera piano symphonie live_session"),
+    ("musique", "Musique", "musique* concert* festival* album* chanson* chanteu* rap rock jazz electro orchestre* opera piano symphonie"),
     ("science", "Sciences", "science* scientifique* recherche chercheu* physique chimie biologie genet* adn cerveau neuro* espace univers planete* astronom* cosmos etoile* mathemati* chiffres evolution animal animaux espece* ocean* dinosaure* chiroptera chauve* insecte* abeille*"),
     ("environnement", "Environnement", "climat* ecolog* environnement* pollution* biodiversite plastique* deforestation foret* energie* secheresse ocean* glacier* agricult* pesticide* rechauffement catastrophe* durable"),
     ("societe", "Société", "societe social* femme* feminis* jeunes jeunesse generation* famille* enfant* ecole education travail emploi pauvrete inegalit* migrant* immigration racisme justice police prison* drogue* sante_mentale reseaux_sociaux internet numerique logement* banlieue*"),

@@ -1,7 +1,7 @@
 /* ACTU — application web installable. Aucune donnée n'est stockée sur le téléphone hormis vos réglages. */
 'use strict';
 
-const VERSION = '1.4.0';
+const VERSION = '1.5.0';
 const DATA = 'data/';
 const REGIONS = {
   fr: { label: 'France', flag: '🇫🇷', color: 'var(--fr)', ink: '#fff' },
@@ -103,15 +103,26 @@ const lazyIO = 'IntersectionObserver' in window ? new IntersectionObserver((entr
     if (!e.isIntersecting) continue;
     const img = e.target;
     lazyIO.unobserve(img);
-    img.src = img.dataset.src;
+    showImg(img);
   }
 }, { rootMargin: '150% 0px' }) : null;
+function showImg(img) {
+  if (img.dataset.srcset) img.srcset = img.dataset.srcset;
+  img.src = img.dataset.src;
+}
 function lazy(root) {
   $$('img[data-src]:not([data-obs])', root).forEach((img) => {
     img.dataset.obs = '1';
     img.addEventListener('load', () => img.classList.add('loaded'), { once: true });
-    img.addEventListener('error', () => img.remove(), { once: true });
-    if (lazyIO) lazyIO.observe(img); else img.src = img.dataset.src;
+    // image absente : l'adresse de secours (data-alt), sinon on la retire
+    img.addEventListener('error', function retry() {
+      if (!img.dataset.alt) { img.remove(); return; }
+      img.removeAttribute('srcset');
+      img.src = img.dataset.alt;
+      delete img.dataset.alt;
+      img.addEventListener('error', retry, { once: true });
+    }, { once: true });
+    if (lazyIO) lazyIO.observe(img); else showImg(img);
   });
 }
 
@@ -416,7 +427,8 @@ function storyFrom(a, region, date) {
   const sentences = (a.summary || '').split(/(?<=[.!?])\s+/).filter((x) => x.length > 20);
   const place = sc.city ? cap(sc.city.toLowerCase()) : (Pixel.countryName(country) ? cap(Pixel.countryName(country).toLowerCase()) : 'Dans le monde');
   return {
-    place: { country, city: sc.city || '', label: place, date: cap(fmtLong.format(new Date(date + 'T12:00:00'))) },
+    place: { country, city: sc.city || '', label: place, date: cap(fmtLong.format(new Date(date + 'T12:00:00'))), iso: date },
+    profile: country,
     actors,
     action: { who: 0, verb: ACTION_VERB[kind] || 'ANNONCE', kind, target: -1 },
     links: [],
@@ -433,8 +445,15 @@ async function playStory(a, region, date, box, useTr = false) {
   if (story && useTr) story = translatedStory(story);
   const t = shown(a, useTr);
   story = story || storyFrom({ ...a, title: t.title, summary: t.summary }, region, date);
+  const profiles = await loadProfiles();
   if (!box.isConnected) return;
-  MindMap.mount(box, story, { color: REGIONS[region].color, onRelated: openRelated });
+  MindMap.mount(box, story, { color: REGIONS[region].color, onRelated: openRelated, profiles });
+}
+/** Le pays en bref (pouvoir, économie, société) : public, préparé chaque semaine par le robot. */
+let profilesP = null;
+function loadProfiles() {
+  profilesP = profilesP || getJSON('profiles.json').then((d) => d.pays || {}).catch(() => { profilesP = null; return {}; });
+  return profilesP;
 }
 /** Le schéma avec ses textes traduits par le robot (phrases de l'article, fiches Wikipédia étrangères). */
 function translatedStory(st) {
@@ -444,7 +463,14 @@ function translatedStory(st) {
     ...st,
     captions: { ...st.captions, quoi: tr.quoi || st.captions?.quoi, liens: tr.liens || st.captions?.liens },
     consequences: (st.consequences || []).map((c, i) => ({ ...c, text: tr.cons?.[i] || c.text })),
-    actors: (st.actors || []).map((x, i) => (x.wiki && tr.act?.[i] ? { ...x, wiki: { ...x.wiki, x: tr.act[i] } } : x)),
+    actors: (st.actors || []).map((x, i) => ({
+      ...x,
+      does: tr.does?.[i] || x.does,
+      wiki: x.wiki && tr.act?.[i] ? { ...x.wiki, x: tr.act[i] } : x.wiki,
+    })),
+    when: (st.when || []).map((w, i) => ({ ...w, t: tr.when?.[i] || w.t })),
+    how: (st.how || []).map((w, i) => ({ ...w, t: tr.how?.[i] || w.t })),
+    why: st.why?.facts ? { ...st.why, facts: st.why.facts.map((f, i) => tr.why?.[i] || f) } : st.why,
     context: st.context && tr.ctx ? { ...st.context, x: tr.ctx } : st.context,
   };
 }
@@ -674,12 +700,22 @@ async function initArte() {
   $('#arte-sort').addEventListener('click', (ev) => {
     const b = ev.target.closest('[data-sort]');
     if (!b) return;
-    arte.sort = b.dataset.sort;
-    $$('[data-sort]', $('#arte-sort')).forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    setArteSort(b.dataset.sort);
     renderArte();
   });
   let t;
-  $('#arte-q').addEventListener('input', () => { clearTimeout(t); t = setTimeout(renderArte, 200); });
+  $('#arte-q').addEventListener('input', () => {
+    clearTimeout(t);
+    t = setTimeout(() => {
+      // une recherche se classe d'abord par pertinence ; sans recherche, on revient au tri choisi avant
+      const searching = !!$('#arte-q').value.trim();
+      $('[data-sort="score"]').hidden = !searching;
+      if (searching && !arte.searching) { arte.before = arte.sort; setArteSort('score'); }
+      if (!searching && arte.searching) setArteSort(arte.before || 'date');
+      arte.searching = searching;
+      renderArte();
+    }, 200);
+  });
   grid.addEventListener('click', (ev) => {
     const c = ev.target.closest('[data-v]');
     if (c) openVideo(arte.list[+c.dataset.v]);
@@ -688,31 +724,110 @@ async function initArte() {
   arte.io.observe($('#arte-more'));
   renderArte();
 }
+function setArteSort(sort) {
+  arte.sort = sort;
+  $$('[data-sort]', $('#arte-sort')).forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.sort === sort)));
+}
+
+/* Recherche ARTE : chaque mot cherché (pluriel, féminin, faute de frappe légère) dans le titre, l'émission, les mots-clés
+   et la description ; le titre compte le plus. Tous les mots doivent être trouvés, sinon on montre les plus proches. */
+const ARTE_STOP = new Set('le la les l un une des du de d et ou en au aux a the of and in on sur pour par avec dans est qui que quoi'.split(' '));
+function stem(w) {
+  if (w.length > 5 && w.endsWith('aux')) return w.slice(0, -3) + 'al';
+  if (w.length > 3 && /[sx]$/.test(w)) w = w.slice(0, -1);
+  if (w.length > 4 && w.endsWith('e')) w = w.slice(0, -1);
+  return w;
+}
+function nearWord(a, b) {  // au plus une lettre de différence (oubli, ajout ou erreur)
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let i = 0, j = 0, diff = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) { i++; j++; continue; }
+    if (++diff > 1) return false;
+    if (a.length > b.length) i++; else if (b.length > a.length) j++; else { i++; j++; }
+  }
+  return diff + (a.length - i) + (b.length - j) <= 1;
+}
+function arteWords(v) {
+  if (!v._w) {
+    const words = (s) => norm(s).trim().split(' ').filter(Boolean).map(stem);
+    v._w = [words(v.title), words([v.program, v.channel, ...(v.tags || []), ...(v.playlists || [])].join(' ')), words(v.desc)];
+  }
+  return v._w;
+}
+function arteScore(v, terms, phrase) {
+  const fields = arteWords(v), weight = [3, 2, 1];
+  let total = 0, found = 0;
+  for (const t of terms) {
+    let best = 0;
+    fields.forEach((ws, f) => {
+      for (const w of ws) {
+        const s = w === t ? 1 : w.startsWith(t) ? 0.8 : t.length >= 5 && nearWord(w.slice(0, t.length + 1), t) || (t.length >= 5 && nearWord(w, t)) ? 0.5 : 0;
+        if (s * weight[f] > best) best = s * weight[f];
+      }
+    });
+    if (best) { found++; total += best; }
+  }
+  if (phrase && norm(v.title).includes(phrase)) total += 3;
+  else if (phrase && norm(v.desc).includes(phrase)) total += 1;
+  return { total, found };
+}
 function renderArte() {
-  const q = norm($('#arte-q').value).trim();
+  const raw = $('#arte-q').value.trim();
+  const terms = [...new Set(norm(raw).trim().split(' ').filter((w) => w && !ARTE_STOP.has(w)).map(stem))];
+  const phrase = terms.length > 1 ? norm(raw) : '';
   const sorters = {
     date: (a, b) => (b.date || '').localeCompare(a.date || ''),
     views: (a, b) => (b.views || 0) - (a.views || 0),
     long: (a, b) => b.duration - a.duration,
+    score: (a, b) => b._score - a._score || (b.date || '').localeCompare(a.date || ''),
   };
-  arte.list = arte.data.videos.filter((v) => (!arte.subject || v.subjects.includes(arte.subject)) &&
-    (!arte.region || (v.regions || []).includes(arte.region)) &&
-    (!q || norm(v.title + ' ' + (v.program || '') + ' ' + (v.desc || '')).includes(' ' + q))).sort(sorters[arte.sort]);
+  let pool = arte.data.videos.filter((v) => (!arte.subject || v.subjects.includes(arte.subject)) &&
+    (!arte.region || (v.regions || []).includes(arte.region)));
+  arte.partial = false;
+  if (terms.length) {
+    for (const v of pool) { const s = arteScore(v, terms, phrase); v._score = s.total; v._found = s.found; }
+    let hits = pool.filter((v) => v._found === terms.length);
+    if (!hits.length && terms.length > 1) {  // aucun reportage n'a tous les mots : ceux qui en ont le plus
+      const most = Math.max(0, ...pool.map((v) => v._found));
+      hits = most ? pool.filter((v) => v._found === most) : [];
+      arte.partial = hits.length > 0;
+    }
+    pool = hits;
+  }
+  arte.terms = terms;
+  arte.list = pool.sort(sorters[arte.sort] || sorters.date);
   arte.shown = 0;
-  $('#arte-grid').innerHTML = arte.list.length ? '' : '<p class="empty">Aucun reportage ne correspond.</p>';
+  $('#arte-grid').innerHTML = !arte.list.length ? '<p class="empty">Aucun reportage ne correspond.</p>'
+    : arte.partial ? '<p class="status">Aucun reportage ne contient tous ces mots : voici les plus proches.</p>' : '';
   moreArte();
+}
+/** Passage de la description où apparaît un mot cherché, mots trouvés surlignés. */
+function arteSnippet(v) {
+  if (!v.desc || !arte.terms?.length) return '';
+  const words = v.desc.split(/(\s+)/);
+  const hit = (w) => { const n = stem(norm(w).trim()); return n && arte.terms.some((t) => n.startsWith(t)); };
+  const at = words.findIndex(hit);
+  if (at < 0) return '';
+  const start = Math.max(0, at - 14), part = words.slice(start, at + 30);
+  return (start ? '… ' : '') + part.map((w) => (hit(w) ? `<mark>${esc(w)}</mark>` : esc(w))).join('') + (at + 30 < words.length ? ' …' : '');
 }
 function moreArte() {
   if (!arte.data || arte.shown >= arte.list.length) return;
   const label = Object.fromEntries(arte.data.subjects.concat(arte.data.regions || []).map((s) => [s.id, s.label]));
   const slice = arte.list.slice(arte.shown, arte.shown + 24);
-  const html = slice.map((v, k) => `
+  const yt = (id, f) => `https://i.ytimg.com/vi/${esc(id)}/${f}.jpg`;
+  const html = slice.map((v, k) => {
+    const snip = arteSnippet(v);
+    return `
     <button class="vcard" data-v="${arte.shown + k}">
-      <span class="vthumb"><img data-src="https://i.ytimg.com/vi/${esc(v.id)}/mqdefault.jpg" alt="" referrerpolicy="no-referrer"><span class="dur">${duration(v.duration)}</span></span>
-      <span class="vt">${esc(v.title)}</span>
+      <span class="vthumb"><img data-src="${yt(v.id, 'sddefault')}" data-srcset="${yt(v.id, 'sddefault')} 640w, ${yt(v.id, 'hq720')} 1280w"
+        sizes="(min-width: 700px) 340px, 100vw" data-alt="${yt(v.id, 'hqdefault')}" alt="" referrerpolicy="no-referrer"><span class="dur">${duration(v.duration)}</span></span>
+      <span class="vt">${esc(v.title)}</span>${snip ? `<span class="vd">${snip}</span>` : ''}
       <span class="vm">${esc(v.program || v.channel)} · ${v.date ? esc(fmtShort.format(new Date(v.date + 'T12:00:00'))) : ''}${v.views ? ' · ' + fmtNum.format(v.views) + ' vues' : ''}</span>
       <span class="vm">${v.subjects.concat(v.regions || []).map((s) => esc(label[s] || s)).join(' · ')}</span>
-    </button>`).join('');
+    </button>`;
+  }).join('');
   arte.shown += slice.length;
   const grid = $('#arte-grid');
   grid.insertAdjacentHTML('beforeend', html);
