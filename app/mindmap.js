@@ -10,8 +10,10 @@ const MindMap = (() => {
   const KIND = {
     ou: ['#38bdf8', '📍', 'Où ?'], quand: ['#22d3ee', '🗓️', 'Quand ?'], qui: ['#a78bfa', '👤', 'Qui ?'], quoi: ['#fbbf24', '⚡', 'Quoi ?'],
     comment: ['#a3e635', '🛠️', 'Comment ?'], pourquoi: ['#f87171', '❓', 'Pourquoi ?'], liens: ['#f472b6', '🔗', 'Liens'],
-    ctx: ['#34d399', '📚', 'Pour comprendre'], apres: ['#fb923c', '➜', 'Et après ?'],
+    ctx: ['#34d399', '📚', 'Pour comprendre'], critique: ['#e879f9', '🧐', 'Regard critique'], apres: ['#fb923c', '➜', 'Et après ?'],
   };
+  const CRIT = { opinion: '💬', titre: '🏷️', sources: '📰', recoupe: '✅', medias: '🗞️', anonyme: '🕶️', doute: '❔', version: '⚖️',
+    voix: '🎙️', termes: '🔤', chiffres: '🔢', angles: '🕳️', anciennete: '⏳', suivi: '🧵', perspective: '🔭' };
   const NATURE = { oppose: ['#f87171', 'contre'], accuse: ['#fb923c', 'accuse'], negocie: ['#facc15', 'négocie avec'],
     aide: ['#60a5fa', 'soutient'], allie: ['#4ade80', 'allié de'], depend: ['#cbd5e1', 'lié à'] };
   const VERB = { ATTAQUE: ['💥', 'Attaque'], NEGOCIE: ['🤝', 'Négociation'], VOTE: ['🗳️', 'Vote'], GAGNE: ['🏆', 'Victoire'], PERD: ['📉', 'Défaite'],
@@ -121,8 +123,16 @@ const MindMap = (() => {
           <p class="mm-s">Sources : ${h(prof.sources)}.</p>` : ''}
         ${also.length ? `<p class="mm-s">Aussi traité par ${h(also.join(', '))}.</p>` : ''}` });
     }
+    // regard critique : comment l'information est construite (sources, doutes, versions, angle, recoupement)
+    const crit = story.critique || [];
+    if (crit.length) {
+      out.push({ id: 'critique', kind: 'critique', step: 'critique', row: 'd', html: `${head('critique')}
+        ${crit.map((c) => `<div class="mm-c mm-crit"><i>${CRIT[c.k] || '•'}</i><div>${h(c.t)}
+          ${c.q ? `<q class="mm-quote">${h(c.q)}</q>` : ''}
+          ${c.l ? `<ul class="mm-titles">${c.l.map((x) => `<li><b>${h(x.s)}</b> « ${h(x.t)} »</li>`).join('')}</ul>` : ''}</div></div>`).join('')}` });
+    }
     const cons = story.consequences?.length ? story.consequences : [{ text: story.captions?.consequences || '', kind: 'autre' }];
-    out.push({ id: 'apres', kind: 'apres', step: 'apres', row: 'd', html: `${head('apres')}
+    out.push({ id: 'apres', kind: 'apres', step: 'apres', row: 'e', html: `${head('apres')}
       ${cons.filter((c) => c.text).map((c) => `<p class="mm-c"><i>${CONS[c.kind] || '➜'}</i><span>${h(c.text)}</span></p>`).join('')}` });
     return { list: out, links };
   }
@@ -153,16 +163,17 @@ const MindMap = (() => {
     world.style.width = W + 'px';
     const byId = Object.fromEntries(list.map((c) => [c.id, c]));
     const rowOf = (r) => list.filter((c) => c.row === r);
-    const rowA = rowOf('a'), rowC = rowOf('c');
+    const rowA = rowOf('a');
+    const lower = ['c', 'd', 'e'].map(rowOf).filter((r) => r.length);  // rangées sous le « Quoi »
     const n = rowA.length;
     const aw = n <= 2 ? 440 : n === 3 ? 400 : 300, gx = n === 4 ? 28 : 36;
     rowA.forEach((c) => { c.w = aw; });
     const [ou, quoi, quand] = ['ou', 'quoi', 'quand'].map((id) => byId[id]);
-    ou.w = 300; quoi.w = 500; quand.w = 380;
-    const cw = rowC.length ? Math.min(640, (W - 2 * PAD - (rowC.length - 1) * 40) / rowC.length) : 0;
-    rowC.forEach((c) => { c.w = cw; });
-    const [ctx, apres] = [byId.ctx, byId.apres];
-    if (ctx) { ctx.w = 680; apres.w = W - 2 * PAD - 680 - 48; } else apres.w = 680;
+    ou.w = 300; quoi.w = 480; quand.w = 380;
+    for (const row of lower) {
+      const cw = Math.min(680, (W - 2 * PAD - (row.length - 1) * 40) / row.length);
+      row.forEach((c) => { c.w = cw; });
+    }
     for (const c of list) c.el.style.width = c.w + 'px';
     for (const c of list) c.h = c.el.offsetHeight;
     const arcs = links.length ? 84 : 0;
@@ -171,20 +182,21 @@ const MindMap = (() => {
     rowA.forEach((c, i) => { c.x = (W - totalA) / 2 + i * (aw + gx); c.y = yA; });
     const hA = n ? Math.max(...rowA.map((c) => c.h)) : 0;
     const yB = n ? yA + hA + GAP : PAD;
-    ou.x = PAD; quoi.x = (W - quoi.w) / 2; quand.x = W - PAD - quand.w;
+    const gapB = (W - 2 * PAD - ou.w - quoi.w - quand.w) / 2;  // où | quoi | quand, espacés également
+    ou.x = PAD; quoi.x = PAD + ou.w + gapB; quand.x = quoi.x + quoi.w + gapB;
     [ou, quoi, quand].forEach((c) => { c.y = yB; });
     const hB = Math.max(ou.h, quoi.h, quand.h);
     let y = yB + hB + GAP;
-    const totalC = rowC.reduce((s, c) => s + c.w, 0) + (rowC.length - 1) * 40;
-    rowC.forEach((c, i) => { c.x = (W - totalC) / 2 + rowC.slice(0, i).reduce((s, x) => s + x.w + 40, 0); c.y = y; });
-    if (rowC.length) y += Math.max(...rowC.map((c) => c.h)) + GAP;
-    if (ctx) { ctx.x = PAD; apres.x = W - PAD - apres.w; } else apres.x = (W - apres.w) / 2;
-    [ctx, apres].forEach((c) => { if (c) c.y = y; });
-    const H = y + Math.max(ctx?.h || 0, apres.h) + PAD;
+    for (const row of lower) {
+      const total = row.reduce((s, c) => s + c.w, 0) + (row.length - 1) * 40;
+      row.forEach((c, i) => { c.x = (W - total) / 2 + row.slice(0, i).reduce((s, x) => s + x.w + 40, 0); c.y = y; });
+      y += Math.max(...row.map((c) => c.h)) + GAP;
+    }
+    const H = y - GAP + PAD;
     for (const c of list) { c.el.style.left = c.x + 'px'; c.el.style.top = c.y + 'px'; }
     world.style.height = H + 'px';
 
-    // traits : qui → quoi, où ↔ quoi ↔ quand, quoi → comment / pourquoi / liens → pour comprendre / et après
+    // traits : qui → quoi, où ↔ quoi ↔ quand, quoi → comment / pourquoi / liens → pour comprendre / regard critique → et après
     const paths = [];
     const curve = (x1, y1, x2, y2, step) => paths.push(`<path class="mm-line" data-step="${step}" pathLength="1" d="M${x1} ${y1} C${x1} ${(y1 + y2) / 2} ${x2} ${(y1 + y2) / 2} ${x2} ${y2}"/>`);
     const side = (x1, y1, x2, y2, step) => paths.push(`<path class="mm-line" data-step="${step}" pathLength="1" d="M${x1} ${y1} C${(x1 + x2) / 2} ${y1} ${(x1 + x2) / 2} ${y2} ${x2} ${y2}"/>`);
@@ -194,13 +206,15 @@ const MindMap = (() => {
     const yy = (a) => a.y + Math.min(a.h, quoi.h) / 2;
     side(ou.x + ou.w, yy(ou), quoi.x, yy(ou), 'quoi');
     side(quoi.x + quoi.w, yy(quand), quand.x, yy(quand), 'quoi');
-    rowC.forEach((c, i) => curve(qx + (i - (rowC.length - 1) / 2) * 60, quoi.y + quoi.h, mid(c), c.y, c.step));
-    const nearest = (x) => rowC.reduce((best, c) => (Math.abs(mid(c) - x) < Math.abs(mid(best) - x) ? c : best), rowC[0]);
-    for (const c of [ctx, apres]) {
-      if (!c) continue;
-      const from = c === ctx ? (byId.pourquoi || nearest(mid(c))) : nearest(mid(c));
-      if (from) curve(mid(from) + (c === ctx ? -40 : 40), from.y + from.h, mid(c), c.y, c.step);
-      else curve(qx + (c === ctx ? -60 : 60), quoi.y + quoi.h, mid(c), c.y, c.step);
+    // chaque case part de la case la plus proche de la rangée du dessus (le « Quoi » pour la première)
+    let above = [quoi];
+    for (const row of lower) {
+      row.forEach((c, i) => {
+        const from = above.reduce((best, x) => (Math.abs(mid(x) - mid(c)) < Math.abs(mid(best) - mid(c)) ? x : best), above[0]);
+        const spread = above.length === 1 ? (i - (row.length - 1) / 2) * 60 : 0;
+        curve(Math.min(from.x + from.w - 20, Math.max(from.x + 20, mid(from) + spread)), from.y + from.h, mid(c), c.y, c.step);
+      });
+      above = row;
     }
     const labels = [];
     links.forEach((l, k) => {
@@ -231,6 +245,7 @@ const MindMap = (() => {
     if (has('pourquoi')) steps.push({ key: 'pourquoi', label: 'Pourquoi ?' });
     if (has('liens')) steps.push({ key: 'liens', label: 'Liens' });
     if (has('ctx')) steps.push({ key: 'ctx', label: 'Pour comprendre' });
+    if (has('critique')) steps.push({ key: 'critique', label: 'Regard critique' });
     steps.push({ key: 'apres', label: 'Et après ?' });
     steps.push({ key: 'all', label: 'Vue d’ensemble' });
     const order = Object.fromEntries(steps.map((s, i) => [s.key, i]));

@@ -252,6 +252,9 @@ def translate_stories(tr, stories, langs):
                 jobs[src].append((st, ("how", i), h["t"]))
             for i, f in enumerate((st.get("why") or {}).get("facts") or []):
                 jobs[src].append((st, ("why", i), f))
+            for i, c in enumerate(st.get("critique") or []):
+                if c.get("q"):
+                    jobs[src].append((st, ("crit", i), c["q"]))
         for i, act in enumerate(st.get("actors") or []):
             w = act.get("wiki")
             if w and w.get("l") in jobs and w.get("x"):

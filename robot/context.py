@@ -26,15 +26,17 @@ RELATED_MIN = 0.17  # en dessous, des sujets seulement voisins
 
 
 def clean(text, n=280, sentences=2):
+    """Les premières phrases entières d'un résumé, jamais coupées en plein milieu (n : longueur visée)."""
     text = INVISIBLE.sub("", text or "")
     text = NOISY_PAREN.sub("", text).replace(" ,", ",").replace("  ", " ")
     text = text.split("\n")[0].strip()
-    parts = SENT_END.split(text)
-    out = " ".join(parts[:sentences])
-    if len(out) > n:
-        out = out[:n]
-        out = out[:out.rfind(" ")].rstrip(",;:") + "…"
-    return out
+    parts = [x for x in SENT_END.split(text) if x.rstrip().endswith((".", "!", "?", "»", ")"))] or [text]
+    out = parts[:1]
+    for x in parts[1:sentences]:
+        if len(" ".join(out + [x])) > n:
+            break
+        out.append(x)
+    return " ".join(out)
 
 
 class Wiki:
@@ -105,7 +107,7 @@ def public(card, n=280):
     """Ce que l'application affiche d'une fiche."""
     if not card:
         return None
-    return {"t": TITLE_PAREN.sub("", card["t"]), "d": card["d"][:90], "x": clean(card["x"], n), "img": card["img"], "u": card["u"], "l": card["l"]}
+    return {"t": TITLE_PAREN.sub("", card["t"]), "d": card["d"], "x": clean(card["x"], n), "img": card["img"], "u": card["u"], "l": card["l"]}
 
 
 def ctx_overlap(card, ctx, skip):
@@ -238,7 +240,7 @@ def related(pool, a, d, idf):
         if key in seen:
             continue
         seen.add(key)
-        res.append({"d": when.isoformat(), "t": b["title"][:140], "s": b["source"], "id": b["id"], "r": region})
+        res.append({"d": when.isoformat(), "t": b["title"], "s": b["source"], "id": b["id"], "r": region})
         if len(res) == 3:
             break
     return sorted(res, key=lambda r: r["d"])
@@ -295,7 +297,48 @@ def enrich(wiki, story, a, region, sents, pool, idf, d):
     story["context"] = public(card, 320)
     story["related"] = related(pool, a, d, idf)
     story["sources"] = [a["source"]] + list(a.get("also", []))[:4]
+    crit = (story.get("critique") or []) + coverage(pool, a, d, idf)
+    story["critique"] = sorted(crit, key=lambda c: CRITIQUE_ORDER.get(c["k"], 50))
     return story
+
+
+CRITIQUE_ORDER = {"opinion": 0, "titre": 1, "sources": 2, "recoupe": 3, "medias": 4, "anonyme": 5, "doute": 6, "version": 7,
+                  "voix": 8, "termes": 9, "chiffres": 10, "angles": 11, "anciennete": 12, "suivi": 13, "perspective": 14}
+SHORT_MONTHS = "janv. févr. mars avr. mai juin juil. août sept. oct. nov. déc.".split()
+
+
+def coverage(pool, a, d, idf):
+    """Recoupement : combien de médias en parlent, comment ils le titrent, depuis quand le sujet revient."""
+    me = set(tokens(a["title"] + " " + a.get("summary", "")))
+    same, past = [], []
+    for when, region, b, bset in pool:
+        if b["id"] == a["id"]:
+            continue
+        s = similarity(me, bset, idf)
+        if s >= 0.3 and abs((when - d).days) <= 1 and b["source"] != a["source"]:
+            same.append((s, b))
+        if s >= RELATED_MIN and when < d:
+            past.append(when)
+    outlets = list(dict.fromkeys([a["source"]] + list(a.get("also", [])) + [b["source"] for _, b in same]))
+    out = []
+    if len(outlets) == 1:
+        out.append({"k": "sources", "t": f"Un seul média, {a['source']}, rapporte cette information dans ACTU pour l’instant : à recouper."})
+    elif len(outlets) >= 3:
+        shown = ", ".join(outlets[:5]) + (f" et {len(outlets) - 5} autres" if len(outlets) > 5 else "")
+        out.append({"k": "recoupe", "t": f"Information recoupée : {len(outlets)} médias en parlent ({shown})."})
+    titles, seen = [], {a["source"]}
+    for s, b in sorted(same, key=lambda x: -x[0]):
+        if b["source"] in seen or norm(b["title"]) == norm(a["title"]):
+            continue
+        seen.add(b["source"])
+        titles.append({"s": b["source"], "t": b["title"], **({"tt": b["tr"]["t"]} if (b.get("tr") or {}).get("t") else {})})
+    if titles:
+        out.append({"k": "medias", "t": "Comment d’autres médias présentent la même information (comparez les angles) :", "l": titles[:3]})
+    if len(set(past)) >= 2:
+        first = min(past)
+        out.append({"k": "suivi", "t": f"Sujet suivi dans la durée : ACTU en parle depuis le {first.day} {SHORT_MONTHS[first.month - 1]} "
+                                       f"({len(past)} articles) ; celui-ci n’en montre qu’un épisode."})
+    return out
 
 
 def report(wiki, n):

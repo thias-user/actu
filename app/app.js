@@ -1,7 +1,7 @@
 /* ACTU — application web installable. Aucune donnée n'est stockée sur le téléphone hormis vos réglages. */
 'use strict';
 
-const VERSION = '1.5.0';
+const VERSION = '1.5.1';
 const DATA = 'data/';
 const REGIONS = {
   fr: { label: 'France', flag: '🇫🇷', color: 'var(--fr)', ink: '#fff' },
@@ -424,7 +424,9 @@ function storyFrom(a, region, date) {
   const actors = names.length ? names.map((name) => ({ name, role: cast[0], country, kind: 'nom' }))
     : [...new Set(cast)].map((role) => ({ name: GROUP[role] || 'Habitants', role, country, group: true }));
   const kind = sc.dir === 'down' ? 'baisse' : TOPIC_ACTION[sc.topic] || 'annonce';
-  const sentences = (a.summary || '').split(/(?<=[.!?])\s+/).filter((x) => x.length > 20);
+  const all = (a.summary || '').split(/(?<=[.!?])\s+/).filter((x) => x.length > 20);
+  const whole = all.filter((x) => !/(…|\.\.\.|\[…\])\W*$/.test(x));  // phrase coupée par le journal : écartée
+  const sentences = whole.length ? whole : all;
   const place = sc.city ? cap(sc.city.toLowerCase()) : (Pixel.countryName(country) ? cap(Pixel.countryName(country).toLowerCase()) : 'Dans le monde');
   return {
     place: { country, city: sc.city || '', label: place, date: cap(fmtLong.format(new Date(date + 'T12:00:00'))), iso: date },
@@ -471,6 +473,7 @@ function translatedStory(st) {
     when: (st.when || []).map((w, i) => ({ ...w, t: tr.when?.[i] || w.t })),
     how: (st.how || []).map((w, i) => ({ ...w, t: tr.how?.[i] || w.t })),
     why: st.why?.facts ? { ...st.why, facts: st.why.facts.map((f, i) => tr.why?.[i] || f) } : st.why,
+    critique: (st.critique || []).map((c, i) => ({ ...c, q: tr.crit?.[i] || c.q, l: c.l?.map((x) => ({ ...x, t: x.tt || x.t })) })),
     context: st.context && tr.ctx ? { ...st.context, x: tr.ctx } : st.context,
   };
 }

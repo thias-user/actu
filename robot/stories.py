@@ -131,7 +131,9 @@ def sentences(text):
             if len(s) > 30 and not JUNK_RE.match(s) and norm(s) not in seen:  # le chapeau est parfois répété dans le texte
                 seen.add(norm(s))
                 out.append(s)
-    return out
+    # une phrase coupée par la source (« … », « [...] ») ne se lit pas : on l'écarte s'il en reste d'autres
+    whole = [s for s in out if not re.search(r"(…|\.\.\.|\[…\]|\[\.\.\.\])\W*$", s)]
+    return whole or out
 
 
 def shorten(s, n):
@@ -338,9 +340,10 @@ def make_story(a, region, sents, date_label, d, lang="fr", prof=None):
     causes = synthesis.why(p, lang)
     means = synthesis.how(p, lang)
     cons = p.take(p.best(2, CONSEQ_CUES.search, start=1))
+    cons_cue = bool(cons)
     if not cons and len(sents) >= 5:
         cons = p.take(p.best(1, start=len(sents) // 2))
-    consequences = [{"text": shorten(s, 200), "kind": best_kind(s, CONS_RX, "autre")} for s in cons] or \
+    consequences = [{"text": s, "kind": best_kind(s, CONS_RX, "autre")} for s in cons] or \
                    [{"text": "Aucune suite annoncée dans l’article pour l’instant.", "kind": "autre"}]
     for act in actors:
         does = synthesis.role_of(p, act)
@@ -354,7 +357,7 @@ def make_story(a, region, sents, date_label, d, lang="fr", prof=None):
         "ou": f"{place} · {date_label}",
         "qui": "En jeu : " + ", ".join(x["name"] for x in actors[:4]) + ".",
         "quoi": quoi,
-        "liens": shorten(link_sentence, 220) if link_sentence else "Sujet aussi traité par " + (", ".join(a.get("also", [])[:3]) or a["source"]) + ".",
+        "liens": link_sentence if link_sentence else "Sujet aussi traité par " + (", ".join(a.get("also", [])[:3]) or a["source"]) + ".",
         "consequences": " ".join(c["text"] for c in consequences),
     }
     story = {
@@ -371,6 +374,10 @@ def make_story(a, region, sents, date_label, d, lang="fr", prof=None):
     else:
         hyp = synthesis.hypotheses(story, scene.get("topic"), prof)
         story["why"] = {"hyp": hyp} if hyp else {"none": True}
+    # regard critique : comment l'article dit les choses (context.py y ajoute le recoupement entre médias)
+    story["_cons_cue"] = cons_cue
+    story["critique"] = synthesis.critique(p, a, story, lang) + synthesis.perspective(story, prof, scene.get("topic"))
+    story.pop("_cons_cue")
     return story
 
 

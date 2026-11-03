@@ -169,7 +169,7 @@ def summary(p, max_chars=640):
         picked.append(i)
         total += len(p.sents[i])
     picked = sorted(picked)[:4] or [0]
-    return " ".join(shorten(s, 320) for s in p.take(picked))
+    return " ".join(p.take(picked))
 
 
 def mentions(actor, sentence):
@@ -189,7 +189,7 @@ def role_of(p, actor):
         pos = s.find(key)
         return mentions(actor, s) and (pos < 0 or pos < len(s) * 0.6)
     idx = p.best(1, subject) or p.best(1, lambda s: mentions(actor, s))
-    return shorten(p.take(idx)[0], 230) if idx else ""
+    return p.take(idx)[0] if idx else ""
 
 
 def _date_in(s, d):
@@ -254,7 +254,7 @@ def timeline(p, d, k=4):
             break
     items = []
     for key, (i, label) in sorted(found.items()):
-        items.append({"k": key, "d": label, "t": shorten(p.sents[i], 150)})
+        items.append({"k": key, "d": label, "t": p.sents[i]})
     return items
 
 
@@ -268,9 +268,9 @@ def how(p, lang):
     """Comment : les moyens, le déroulé, et un chiffre clé."""
     rx = HOW_RX.get(lang, HOW_RX["fr"])
     ok = {i for i in range(len(p.sents)) if not quoted(p.sents[i]) and p.relevant(i)}
-    out = [{"t": shorten(s, 240), "k": "moyen"} for s in p.take([i for i in p.best(4, lambda s: bool(cue(rx, s))) if i in ok][:2])]
+    out = [{"t": s, "k": "moyen"} for s in p.take([i for i in p.best(4, lambda s: bool(cue(rx, s))) if i in ok][:2])]
     fig = [i for i in p.best(3, lambda s: bool(FIGURE_RX.search(s)) and not re.match(r"^\W*\d{4}\b", s)) if i in ok][:1]
-    out += [{"t": shorten(s, 220), "k": "chiffre"} for s in p.take(fig)]
+    out += [{"t": s, "k": "chiffre"} for s in p.take(fig)]
     return out
 
 
@@ -278,23 +278,22 @@ def why(p, lang):
     """Pourquoi : les causes que donne l'article."""
     rx = WHY_RX.get(lang, WHY_RX["fr"])
     idx = [i for i in p.best(4, lambda s: bool(cue(rx, s))) if p.score(i) > -1 and p.relevant(i) and not quoted(p.sents[i])][:2]
-    out = [shorten(s, 260) for s in p.take(idx)]
-    if not out:  # la cause est dans une phrase déjà reprise (souvent le chapeau) : on n'en garde que la proposition
+    out = p.take(idx)
+    if not out:  # la cause est dans une phrase déjà reprise (souvent le chapeau) : on la redonne en entier
         for i in sorted(p.used):
             m = cue(rx, p.sents[i])
-            clause = cause_clause(p.sents[i], m.start()) if m and p.relevant(i) else ""
-            if clause:
-                return [clause]
+            if m and p.relevant(i) and len(cause_clause(p.sents[i], m.start())) >= 40:
+                return [p.sents[i]]
     return out
 
 
 def cause_clause(s, start):
+    """La proposition qui donne la cause (sert à juger si elle est assez précise)."""
     rest = s[start:]
     end = re.search(r"[.;!?](\s|$)", rest)
     rest = rest[:end.start()] if end else rest
     comma = rest.find(",", 25)
-    rest = (rest[:comma] if comma > 0 else rest).strip(" ,;:")
-    return "… " + shorten(rest, 200) + "." if len(rest) >= 40 else ""
+    return (rest[:comma] if comma > 0 else rest).strip(" ,;:")
 
 
 HYPOTHESES = {
@@ -443,3 +442,194 @@ def hypotheses(story, topic, prof):
             "chef": f" (gouvernement de {chef})" if chef else "",
             "instable": ", dans un contexte d’instabilité gouvernementale" if (prof or {}).get("classes", {}).get("instable") else ""}
     return [t.format(**fill) for t in templates]
+
+
+# ---------------------------------------------------------------- regard critique
+# Ce que l'article dit, mais aussi comment il le dit : qui parle, ce qui n'est pas établi, ce qui est contesté.
+SAID_CUES = {
+    "fr": r"\b(?:a|ont|avait|avaient) (?:déclaré|indiqué|affirmé|expliqué|précisé|annoncé|estimé|assuré|souligné|confié|dit|ajouté|"
+          r"répondu|dénoncé|reconnu|admis|averti|jugé)|\b(?:déclare|affirme|explique|estime|assure|souligne|ajoute|indique|selon|"
+          r"d['’]après|témoigne|raconte)\b|-t-(?:il|elle|ils|elles)\b",
+    "en": r"\b(?:said|says|told|according to|stated|announced|added|wrote|argued|explained|noted|claimed|insisted|warned)\b",
+    "es": r"\b(?:dijo|afirmó|señaló|indicó|aseguró|según|explicó|declaró|sostuvo|añadió|agregó|precisó|manifestó|advirtió)\b",
+}
+ANON_CUES = {
+    "fr": r"\b(?:une source|des sources|plusieurs sources|source proche|sources proches|selon nos informations|sous couvert d['’]anonymat|"
+          r"requis l['’]anonymat|requérant l['’]anonymat|souhaité garder l['’]anonymat|un proche du dossier|un connaisseur du dossier)",
+    "en": r"\b(?:a source|sources said|sources told|people familiar|person familiar|on condition of anonymity|requested anonymity|"
+          r"asked not to be named|declined to be named|speaking anonymously|an official who)",
+    "es": r"\b(?:una fuente|fuentes cercanas|fuentes consultadas|fuentes oficiales|bajo condición de anonimato|pidió no ser identificad\w+|"
+          r"prefirió el anonimato)",
+}
+DOUBT_CUES = {
+    "fr": r"\b(?:aurai(?:t|ent) (?:été|eu|fait|tué|reçu)|serai(?:t|ent) (?:responsable|impliqu\w+|à l['’]origine)|non confirmé\w*|"
+          r"pas (?:encore )?(?:été )?confirmé\w*|pas (?:pu être )?vérifié\w*|présumée?s?|supposée?s?|reste(?:nt)? à (?:établir|confirmer|"
+          r"déterminer|prouver)|on ignore|on ne sait pas|incertitude\w*|zones? d['’]ombre|flou\w*|selon des informations)",
+    "en": r"\b(?:reportedly|allegedly|alleged|unconfirmed|could not (?:be )?(?:independently )?(?:verify|verified|confirm|confirmed)|"
+          r"it is (?:not|un)clear|remains? unclear|it was not immediately clear|apparently|may have been|might have)\b",
+    "es": r"\b(?:presunt\w+|supuestamente|al parecer|sin confirmar|no (?:ha sido|fue) confirmad\w+|no está claro|se desconoce|"
+          r"habría(?:n)? (?:sido|sufrido|recibido|matado))\b",
+}
+DISPUTE_CUES = {
+    "fr": r"\b(?:dément\w*|démenti\w*|nie(?:nt)?|a nié|ont nié|conteste\w*|contesté\w*|récuse\w*|réfute\w*|s['’]inscrit en faux|"
+          r"se (?:dit|disent|déclare) innocent\w*|dénonce\w* (?:des|une|un) (?:accusations?|mensonges?|manipulation))",
+    "en": r"\b(?:denied|denies|disputed|disputes|rejected the|rejects the|refuted|pushed back|baseless|false claims|maintains? (?:his|her|their) innocence)\b",
+    "es": r"\b(?:negó|niega|niegan|desmintió|desmiente|rechazó las|rechaza las|refutó|cuestionó|inocencia)\b",
+}
+STRONG_RX = re.compile(r"\b(choc|historique|scandale|polémique|incroyable|explosi(?:f|ve)|fiasco|chaos|humiliation|terrifiant\w*|"
+                       r"inédit\w*|shocking|stunning|slams|blasts|historic|bombshell|outrage|furious|devastating|unprecedented|"
+                       r"escándalo|polémica|históric[oa]|impactante|insólit[oa]|brutal)\b", re.I)
+OPINION_RX = re.compile(r"\b(letters?|opinion|editorial|éditorial|édito|tribune|chronique|point de vue|analysis|column|commentary|"
+                        r"op-ed|carta|columna|critique|review)\b|on vient de voir|/(?:opinion|idees|tribunes?|chroniques?|"
+                        r"editorial|commentisfree|opinion-|blogs?)/", re.I)
+FIG_RX = re.compile(r"(?<![\d,.])(\d{1,3}(?:[\s  .,]\d{3})+|\d+(?:[.,]\d+)?)\s*(%|[a-zà-ÿ]{5,})", re.I)
+RX = {name: {k: re.compile(v, re.I) for k, v in table.items()}
+      for name, table in (("said", SAID_CUES), ("anon", ANON_CUES), ("doubt", DOUBT_CUES), ("dispute", DISPUTE_CUES))}
+
+
+def _rx(name, lang):
+    return RX[name].get(lang, RX[name]["fr"])
+
+
+def _num(s):
+    s = re.sub(r"[\s  ]", "", s)
+    if re.fullmatch(r"\d{1,3}([.,]\d{3})+", s):
+        s = re.sub(r"[.,]", "", s)
+    try:
+        return float(s.replace(",", "."))
+    except ValueError:
+        return None
+
+
+def figures_gap(title, sents):
+    """Un chiffre du titre que le texte ne reprend pas, alors qu'il en donne un autre pour la même chose."""
+    in_title = {m.group(2).lower()[:6]: m for m in FIG_RX.finditer(title)}
+    for unit, tm in in_title.items():
+        tv = _num(tm.group(1))
+        if tv is None or (1900 <= tv <= 2100 and unit != "%"):
+            continue
+        seen = [m for s in sents for m in FIG_RX.finditer(s) if m.group(2).lower()[:6] == unit]
+        values = {_num(m.group(1)) for m in seen}
+        if seen and tv not in values:
+            other = next(m for m in seen if _num(m.group(1)) is not None)
+            if abs(_num(other.group(1)) - tv) > 0.05 * max(tv, 1):
+                return f"Le titre annonce {tm.group(0).strip()}, le texte parle de {other.group(0).strip()} : un chiffre a peut-être changé, ou l’un des deux est arrondi."
+    return ""
+
+
+def names(xs):
+    xs = list(dict.fromkeys(xs))
+    return xs[0] if len(xs) == 1 else ", ".join(xs[:-1]) + " et " + xs[-1]
+
+
+def critique(p, a, story, lang):
+    """Regard critique tiré de l'article lui-même : genre, titre, sources, doutes, versions contestées, voix, chiffres."""
+    out = []
+    title = a["title"]
+    opinion = bool(OPINION_RX.search(title) or OPINION_RX.search(a.get("url", "")))
+    if opinion:
+        out.append({"k": "opinion", "t": "Texte d’opinion, de critique ou d’analyse : il défend un point de vue, à lire comme tel."})
+    # une citation (au moins trois mots, ou en tête suivie de « : ») ; « “Club Kid”, une comédie… » est un titre d'œuvre
+    quotes = re.findall(r"[«“\"]\s*([^»”\"]{3,}?)\s*[»”\"]", title) + re.findall(r"^\s*['‘]([^'’]{3,})['’]", title)
+    if any(len(q.split()) >= 3 for q in quotes) or re.match(r"^\s*[«“\"'‘][^»”\"'’]+[»”\"'’]\s*:", title):
+        out.append({"k": "titre", "t": "Le titre reprend une citation : c’est la parole de quelqu’un, pas un fait établi par le journal."})
+    elif title.rstrip().endswith("?"):
+        out.append({"k": "titre", "t": "Le titre pose une question : l’article ne tranche pas forcément."})
+    strong = STRONG_RX.search(title)
+    if strong:
+        out.append({"k": "titre", "t": f"Le titre emploie un mot fort (« {strong.group(0)} ») : il dit l’importance que le journal donne au sujet, pas un fait."})
+    if len(p.sents) < 5:
+        return out
+    said = _rx("said", lang)
+    share = sum(bool(said.search(s)) for s in p.sents) / len(p.sents)
+    anon = next((s for s in p.sents if _rx("anon", lang).search(s)), None)
+    if anon:
+        out.append({"k": "anonyme", "t": "Une partie des informations vient de sources anonymes, que le lecteur ne peut pas vérifier :", "q": anon})
+    if share == 0 and len(p.sents) >= 8 and not opinion:
+        out.append({"k": "sources", "t": "Aucune affirmation n’est attribuée à une source : l’article repose sur le seul récit de son auteur."})
+    elif share >= 0.5:
+        out.append({"k": "sources", "t": f"L’article s’appuie beaucoup sur des déclarations ({round(share * 100)} % des phrases) : ce sont des positions, "
+                                         "à confronter aux faits."})
+    for key, label in (("doubt", "Ce qui n’est pas établi :"), ("dispute", "Une version est contestée :")):
+        idx = [i for i, s in enumerate(p.sents) if _rx(key, lang).search(s) and p.relevant(i) and s != anon]
+        if idx:
+            out.append({"k": "doute" if key == "doubt" else "version", "t": label, "q": p.sents[max(idx, key=p.score)]})
+    # qui parle, qui ne parle pas (seulement les personnes et organisations vérifiées sur Wikipédia)
+    people = [x for x in story["actors"] if x.get("kind") in ("nom", "org") and x.get("wiki")]
+
+    def speaks(x):
+        return any(mentions(x, s) and (said.search(s) or QUOTED.search(s)) for s in p.sents)
+    heard = [(x.get("wiki") or {}).get("t") or x["name"] for x in people if speaks(x)]
+    silent = [(x.get("wiki") or {}).get("t") or x["name"] for x in people if not speaks(x)]
+    if heard and silent:
+        out.append({"k": "voix", "t": f"On entend {names(heard)}, mais pas {names(silent)} : un point de vue manque peut-être."})
+    # combien de personnes s'expriment nommément
+    speakers = {m.group(1).split()[-1] for s in p.sents if said.search(s) for m in SPEAKER_RX.finditer(s)
+                if norm(m.group(1)).strip() not in NOT_SPEAKERS and not INSTITUTION_RX.search(m.group(1))}
+    if len(speakers) == 1 and share >= 0.2:
+        out.append({"k": "voix", "t": f"Une seule personne est citée nommément ({next(iter(speakers))}) : un seul regard sur les faits."})
+    elif len(speakers) >= 4:
+        out.append({"k": "voix", "t": f"{len(speakers)} personnes sont citées nommément : l’article confronte plusieurs points de vue."})
+    # mots chargés employés par le journal lui-même (pas dans les citations)
+    spans = lambda s: [m.span() for m in QUOTED.finditer(s)]
+    loaded = list(dict.fromkeys(m.group(0).lower() for s in p.sents for m in _rx("loaded", lang).finditer(s)
+                                if not any(a_ <= m.start() < b_ for a_, b_ in spans(s))))
+    if len(loaded) >= 2:
+        out.append({"k": "termes", "t": "Le texte emploie des mots chargés (" + ", ".join(f"« {w} »" for w in loaded[:3]) +
+                                         ") : ils portent un jugement, que tous ne partagent pas forcément."})
+    gap = figures_gap(title, p.sents)
+    if gap:
+        out.append({"k": "chiffres", "t": gap})
+    # ce que l'article laisse sans réponse
+    missing = [w for w, ok in (("d’explication sur les causes", bool((story.get("why") or {}).get("facts"))),
+                               ("de précision sur le déroulé", bool(story.get("how"))),
+                               ("d’indication sur la suite", story.get("_cons_cue", True))) if not ok]
+    if len(missing) >= 2:
+        out.append({"k": "angles", "t": f"Angles morts possibles : ACTU n’a pas trouvé dans l’article {names(missing)}."})
+    # des faits anciens derrière l'actualité du jour
+    years = sorted(int(w["k"][:4]) for w in story.get("when") or [] if w["k"][:4].isdigit())
+    d_year = int(story["place"]["iso"][:4])
+    old = [y for y in years if y < d_year - 1]
+    if len(old) >= 2 and len(old) * 2 >= len(years):
+        span = f"{old[0]}" if old[0] == old[-1] else f"{old[0]} à {old[-1]}"
+        out.append({"k": "anciennete", "t": f"Une bonne part des faits évoqués date de {span} : l’actualité du jour s’inscrit dans une histoire plus longue."})
+    return out
+
+
+SPEAKER_RX = re.compile(r"\b([A-ZÀ-ÖØ-Þ][a-zà-ÿ'’-]+(?:\s+(?:de\s+|del\s+|da\s+|van\s+|von\s+|di\s+)?[A-ZÀ-ÖØ-Þ][a-zà-ÿ'’-]+)+)")
+NOT_SPEAKERS = {"new york", "le monde", "united states", "etats unis", "white house", "maison blanche", "la moneda", "kyiv independent",
+                "associated press", "agence france presse", "national guard", "supreme court", "corte suprema", "union europeenne",
+                "european union", "le figaro", "la tercera", "el pais", "the guardian", "new york times", "washington post"}
+INSTITUTION_RX = re.compile(r"\b(Staff|Service|Ministry|Force|Forces|Council|Party|Office|Department|Agency|Police|Guard|Army|Court|"
+                            r"House|Bank|Union|Committee|Commission|Ministère|Conseil|Parti|Agence|Garde|Armée|Cour|Banque|Comité|"
+                            r"Ministerio|Consejo|Partido|Gobierno|Fuerzas|Policía|Ejército|Tribunal|Banco|Assemblée|Senate|Sénat|"
+                            r"Congress|Congrès|Congreso|Institute|Institut|Instituto|University|Université|Universidad|Group|Groupe|"
+                            r"Grupo|Association|Asociación|Foundation|Fondation|Fundación|News|Times|Post|Press|Presse|Radio|TV)\b")
+LOADED_CUES = {
+    "fr": r"\b(?:massacres?|génocides?|terroristes?|régimes? (?:de|du|des|autoritaire)|dictateurs?|dictatures?|propagande|extrémistes?|"
+          r"islamistes?|complotistes?|fascistes?|honteu(?:x|se)|scandaleu(?:x|se)|désastreu(?:x|se)|catastrophiques?|inacceptables?|"
+          r"ultras?|voyous?|délirant\w*)\b",
+    "en": r"\b(?:massacres?|genocide|terrorists?|regime|dictators?|dictatorship|propaganda|extremists?|thugs?|disgrace\w*|"
+          r"disastrous|catastrophic|outrageous|shameful|radical left|far-left|far-right|extremism)\b",
+    "es": r"\b(?:masacres?|genocidio|terroristas?|régimen|dictador\w*|dictadura|propaganda|extremistas?|vergonzos[oa]s?|"
+          r"desastros[oa]s?|catastrófic[oa]s?|inaceptables?|delirante\w*)\b",
+}
+RX["loaded"] = {k: re.compile(v, re.I) for k, v in LOADED_CUES.items()}
+
+
+def perspective(story, prof, topic):
+    """Mise en perspective avec le pays : ce qui, dans le contexte, pèse sur l'événement."""
+    if not prof:
+        return []
+    c = prof.get("classes", {})
+    theme = TOPIC_ALIAS.get(topic, topic)
+    out = []
+    if theme == "politique" and c.get("instable"):
+        out.append("forte instabilité politique : plusieurs chefs du gouvernement se sont succédé en deux ans")
+    if theme in ("politique", "economie", "transport", "education", "climat"):
+        note = eco_note(prof).replace(", dans un contexte de ", "")
+        if note:
+            out.append(note)
+    if not out:
+        return []
+    return [{"k": "perspective", "t": f"À mettre en regard, pour {prof['nom']} : " + " ; ".join(out) + "."}]

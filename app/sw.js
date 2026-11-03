@@ -1,6 +1,6 @@
 /* Service worker ACTU : garde seulement la « coquille » de l'application (≈ 100 Ko) pour démarrer vite.
    Les articles ne sont jamais stockés : ils viennent toujours d'internet. */
-const CACHE = 'actu-shell-v6';
+const CACHE = 'actu-shell-v7';
 const SHELL = ['./', 'index.html', 'app.css', 'app.js', 'pixel.js', 'mindmap.js', 'themes.json', 'manifest.webmanifest', 'icons/apple-touch-icon.png', 'icons/favicon-32.png'];
 
 self.addEventListener('install', (e) => {

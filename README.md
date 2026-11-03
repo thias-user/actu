@@ -48,7 +48,10 @@ dans cette histoire), **Quoi ?** (l'essentiel en quelques phrases), **Comment ?*
 **Pourquoi ?** (les causes données par les sources ; si elles n'en donnent pas, trois hypothèses, présentées comme telles),
 **Liens** (qui s'oppose à qui, qui soutient qui), **Pour comprendre** (une page Wikipédia sur le sujet quand elle apporte
 quelque chose, et le pays en bref : régime et dirigeants, niveau de vie, croissance, inflation, chômage, inégalités, avec une
-lecture d'ensemble) et **Et après ?** (les suites annoncées). La caméra s'approche de chaque case, puis montre le schéma entier ;
+lecture d'ensemble), **Regard critique** (comment l'information est construite : genre et angle du titre, recoupement entre
+médias et façon dont chacun la titre, sources anonymes, ce qui n'est pas établi, versions contestées, qui parle et qui manque,
+mots chargés, chiffres qui ne concordent pas, angles morts, ancienneté des faits, mise en regard avec le pays) et **Et après ?**
+(les suites annoncées). Tous les textes sont des phrases entières, jamais coupées. La caméra s'approche de chaque case, puis montre le schéma entier ;
 touchez une case pour l'agrandir. Le bouton plein écran affiche le schéma sur tout le téléphone, droit ; le bouton « Paysage »
 le fait pivoter.
 

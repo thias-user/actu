@@ -194,7 +194,6 @@ body.on-feed .tabbar button[aria-current="page"] { color: #fff; }
 .mm-tl li.now::before { background: var(--k); box-shadow: 0 0 0 5px rgba(34,211,238,.22); }
 .mm-tl time { display: block; margin-bottom: 2px; color: var(--k); font-size: 15px; font-weight: 900; letter-spacing: .05em; text-transform: uppercase; }
 .mm-tl .mm-item { margin: 2px 0 0; }
-.mm-tl li > div { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 .mm-does { margin: 12px 0 0; padding: 10px 12px; border-radius: 12px; background: rgba(167,139,250,.13); color: #f1eefc; font-size: 19px; }
 .mm-does span { display: block; margin-bottom: 3px; color: var(--k); font-size: 13px; font-weight: 900; letter-spacing: .09em; text-transform: uppercase; }
 .mm-warn { margin: 0 0 12px; padding: 10px 12px; border-radius: 12px; background: rgba(248,113,113,.15); color: #fecaca; font-size: 17px; font-weight: 700; line-height: 1.35; }
@@ -202,6 +201,13 @@ body.on-feed .tabbar button[aria-current="page"] { color: #fff; }
 .mm-hyp li { margin: 0 0 10px; padding-left: 4px; }
 .mm-hyp li::marker { color: var(--k); font-weight: 900; }
 .mm-h small.mm-badge { padding: 2px 10px; border-radius: 99px; background: var(--k); color: #0b0d12; font-size: 13px; font-weight: 900; letter-spacing: .06em; }
+.mm-crit { font-size: 19px; line-height: 1.4; }
+.mm-crit > div { min-width: 0; }
+.mm-quote { display: block; margin: 6px 0 0; padding: 6px 0 6px 12px; border-left: 3px solid var(--k); color: #f3eef6; font-family: var(--serif); font-size: 19px; font-style: italic; }
+.mm-quote::before, .mm-quote::after { content: none; }
+.mm-titles { margin: 6px 0 0; padding-left: 18px; color: #e9e5e0; font-size: 18px; }
+.mm-titles li { margin: 0 0 6px; }
+.mm-titles b { color: var(--k); }
 .mm-prof { font-size: 18.5px; }
 .mm-prof b { color: #fff; }
 .mm-bars { position: absolute; z-index: 3; top: 9px; left: 12px; right: 12px; display: flex; gap: 4px; pointer-events: none; }
