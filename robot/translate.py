@@ -28,17 +28,19 @@ def split(paragraph):
     return [s.strip() for s in SENT_RE.split(paragraph) if s.strip()]
 
 
-TR_VERSION = 3
+TR_VERSION = 4
 WORD_RE = re.compile(r"[A-Za-zÀ-ÿ][\w'’-]*")
 
 
-ELISION_RE = re.compile(r"(?<=[A-Za-zÀ-ÿ])\s*['’]\s*(?=[A-Za-zÀ-ÿ])")
+ELISION_RE = re.compile(r"(?<=[A-Za-zÀ-ÿ])\s*['’]\s*(?=[A-Za-zÀ-ÿ«\"])")
 
 
 def tidy(text):
     """Sortie du modèle → texte propre : « L &apos; Agence » (codes hérités de ses données d'entraînement) → « L'Agence »."""
     text = html.unescape(html.unescape(text))
     text = re.sub(r"'{2,}", "'", text)
+    text = re.sub(r"\s*>\s*>", " »", re.sub(r"<\s*<\s*", "« ", text))  # « < < un but > > » → « un but »
+    text = re.sub(r"«\s*", "« ", re.sub(r"\s*»", " »", text))
     text = ELISION_RE.sub("'", text)
     return re.sub(r"\s+([,.])", r"\1", re.sub(r"\s{2,}", " ", text)).strip()
 
