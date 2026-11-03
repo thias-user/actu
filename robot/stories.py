@@ -8,9 +8,11 @@ votre code de lecture → app/data/stories/AAAA-MM-JJ.bin
 """
 import os
 import re
+import time
 from datetime import timedelta
 
 import context
+import critique_ai
 import profiles
 import synthesis
 import translate
@@ -399,7 +401,9 @@ def update(days, tr=None):
     places = profiles.Profiles()
     places.prepare(story_country(a, reg) for d in days if (ed := read_json(day_path(d))) for reg, arts in ed["regions"].items() for a in arts)
     total = 0
-    for d in days:
+    critic = critique_ai.Critic()  # analyse argumentée par l'IA libre, pour les articles à la une
+    deadline = time.time() + critique_ai.SECONDS
+    for d in sorted(days, reverse=True):  # le jour le plus récent d'abord : c'est lui que l'IA analyse en priorité
         ed = read_json(day_path(d))
         if not ed:
             continue
@@ -433,6 +437,8 @@ def update(days, tr=None):
                 old = decrypt(key, spath.read_bytes())
             except Exception:
                 old = None
+        top = [(reg, a) for reg, arts in ed["regions"].items() for a in arts[:critique_ai.PER_REGION]]
+        critic.run(stories, top, old, lambda a: sentences(texts.get(a["id"], "")), date_label, deadline)
         if old != stories:
             spath.parent.mkdir(parents=True, exist_ok=True)
             spath.write_bytes(encrypt(key, stories))
@@ -440,4 +446,7 @@ def update(days, tr=None):
     wiki.save()
     places.save()
     context.report(wiki, total)
+    if critic.done or critic.failed:
+        log(f"  Analyses critiques par l'IA : {critic.done} rédigées en {critic.seconds / 60:.1f} min"
+            + (" (IA indisponible)" if critic.failed else ""))
     log(f"Schémas « En un coup d'œil » : {total} articles résumés")

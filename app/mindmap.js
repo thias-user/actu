@@ -124,9 +124,11 @@ const MindMap = (() => {
         ${also.length ? `<p class="mm-s">Aussi traité par ${h(also.join(', '))}.</p>` : ''}` });
     }
     // regard critique : comment l'information est construite (sources, doutes, versions, angle, recoupement)
-    const crit = story.critique || [];
-    if (crit.length) {
+    const crit = story.critique || [], ai = story.ai;
+    if (crit.length || ai) {
       out.push({ id: 'critique', kind: 'critique', step: 'critique', row: 'd', html: `${head('critique')}
+        ${ai ? `<div class="mm-ai"><span>Analyse rédigée par une IA libre (${h(ai.m)}) · à lire avec recul</span><p>${h(ai.t)}</p></div>` : ''}
+        ${crit.length && ai ? '<div class="mm-sub">Ce qu’ACTU relève dans l’article</div>' : ''}
         ${crit.map((c) => `<div class="mm-c mm-crit"><i>${CRIT[c.k] || '•'}</i><div>${h(c.t)}
           ${c.q ? `<q class="mm-quote">${h(c.q)}</q>` : ''}
           ${c.l ? `<ul class="mm-titles">${c.l.map((x) => `<li><b>${h(x.s)}</b> « ${h(x.t)} »</li>`).join('')}</ul>` : ''}</div></div>`).join('')}` });

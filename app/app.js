@@ -1,7 +1,7 @@
 /* ACTU — application web installable. Aucune donnée n'est stockée sur le téléphone hormis vos réglages. */
 'use strict';
 
-const VERSION = '1.5.1';
+const VERSION = '1.6.0';
 const DATA = 'data/';
 const REGIONS = {
   fr: { label: 'France', flag: '🇫🇷', color: 'var(--fr)', ink: '#fff' },
@@ -857,11 +857,16 @@ async function initResearch() {
   $('#rs-q').addEventListener('search', () => { if (!$('#rs-q').value.trim()) renderCurated(); });
   try { rs.curated = await getJSON('research.json'); } catch { rs.curated = null; }
   renderCurated();
+  Synthese.bar();
 }
+const rsPapers = window.rsPapers = new Map();  // articles affichés, pour la synthèse par l'IA (synthese.js)
 function paperHTML(p) {
   const link = p.pdf || p.url;
   const lang = (p.lang || '').slice(0, 2).toUpperCase();
+  const k = Synthese.key(p);
+  rsPapers.set(k, p);
   return `<article class="paper">
+    <button class="pick" data-pick="${esc(k)}" aria-pressed="${Synthese.isSelected(p)}">${Synthese.isSelected(p) ? '✓ Choisi' : '＋ Synthèse'}</button>
     <a class="t" href="${href(link)}" target="_blank" rel="noopener">${esc(p.title)}</a>
     <div class="m">${esc(p.authors || 'Auteurs non précisés')}${p.year ? ' · ' + p.year : ''}${p.venue ? ' · <i>' + esc(p.venue) + '</i>' : ''}</div>
     <div class="badges">${p.cited != null ? `<span class="badge">Cité ${fmtNum.format(p.cited)} fois</span>` : ''}${p.pdf ? '<span class="badge oa">Accès libre</span>' : ''}${lang ? `<span class="badge">${lang}</span>` : ''}<span class="badge">${esc(p.src)}</span></div>
@@ -901,8 +906,7 @@ function oaAbstract(inv) {
   if (!inv) return '';
   const words = [];
   for (const [w, ps] of Object.entries(inv)) for (const p of ps) words[p] = w;
-  const s = words.filter(Boolean).join(' ');
-  return s.length > 600 ? s.slice(0, 600).replace(/\s\S*$/, '') + '…' : s;
+  return words.filter(Boolean).join(' ');
 }
 async function searchOpenAlex(q, lang, sort, since) {
   const clean = q.replace(/[,|:]/g, ' ').trim();
@@ -935,7 +939,7 @@ async function searchHAL(q, lang, sort, since) {
     title: (x.title_s || [''])[0], year: x.producedDateY_i, cited: null, lang: (x.language_s || [''])[0], src: 'HAL',
     authors: (x.authFullName_s || []).slice(0, 3).join(', ') + ((x.authFullName_s || []).length > 3 ? ' et al.' : ''),
     venue: x.journalTitle_s, url: x.doiId_s ? 'https://doi.org/' + x.doiId_s : x.uri_s, pdf: x.fileMain_s,
-    abstract: ((x.abstract_s || [''])[0] || '').slice(0, 600),
+    abstract: (x.abstract_s || [''])[0] || '',
   }));
 }
 async function searchCrossref(q) {
@@ -946,7 +950,7 @@ async function searchCrossref(q) {
     title: (w.title || [''])[0], year: w.issued?.['date-parts']?.[0]?.[0], cited: w['is-referenced-by-count'], lang: '', src: 'Crossref',
     authors: (w.author || []).slice(0, 3).map((a) => [a.given, a.family].filter(Boolean).join(' ')).join(', '),
     venue: (w['container-title'] || [])[0], url: 'https://doi.org/' + w.DOI, pdf: null,
-    abstract: (w.abstract || '').replace(/<[^>]+>/g, ' ').slice(0, 600),
+    abstract: (w.abstract || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(),
   }));
 }
 let searchSeq = 0;

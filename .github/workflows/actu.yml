@@ -32,7 +32,7 @@ jobs:
   update:
     if: github.event_name != 'push'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     outputs:
       changed: ${{ steps.save.outputs.changed }}
     steps:
@@ -69,6 +69,24 @@ jobs:
         with:
           path: robot/models
           key: opus-mt-ct2-en_fr-es_fr-1
+      - name: IA libre des analyses critiques (Qwen3-4B, téléchargée une fois)
+        id: llm
+        uses: actions/cache/restore@v4
+        with:
+          path: robot/llm
+          key: llm-qwen3-4b-instruct-2507-q4km-1
+      - name: Moteur de l'IA libre (llama.cpp)
+        id: llmprep
+        continue-on-error: true
+        run: |
+          pip install "llama-cpp-python==0.3.34" --only-binary=:all: --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+          python robot/critique_ai.py prepare
+      - name: Mise en cache de l'IA libre
+        if: steps.llm.outputs.cache-hit != 'true' && steps.llmprep.outcome == 'success'
+        uses: actions/cache/save@v4
+        with:
+          path: robot/llm
+          key: llm-qwen3-4b-instruct-2507-q4km-1
       - name: Collecte des articles, replays, ARTE, recherche
         env:
           OPENALEX_API_KEY: ${{ secrets.OPENALEX_API_KEY }}
@@ -86,7 +104,7 @@ jobs:
             echo "Rien de nouveau"
           else
             git commit -m "Édition du $(TZ=Europe/Paris date +%d/%m/%Y)"
-            git push
+            for i in 1 2 3 4 5; do git pull --rebase -q && git push && break; sleep 15; done
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 

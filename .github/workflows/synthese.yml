@@ -1,0 +1,51 @@
+# Synthèse de recherche à la demande (onglet Recherche d'ACTU) : l'application ouvre une demande « Synthèse ACTU … »,
+# ce robot la traite avec l'IA libre et gratuite, chiffre le résultat avec le code de lecture et ferme la demande.
+name: ACTU – synthèse de recherche
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: actu-synthese
+  cancel-in-progress: false
+
+jobs:
+  synthese:
+    # seulement les demandes du propriétaire du projet
+    if: github.event.issue.user.login == github.repository_owner && startsWith(github.event.issue.title, 'Synthèse ACTU')
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: robot/requirements.txt
+      - run: pip install -r robot/requirements.txt
+      - name: Synthèse par l'agent IA (fiches, synthèse BCE relue par le jury, dialogue critique)
+        env:
+          ACTU_READ_KEY: ${{ secrets.ACTU_READ_KEY }}
+          REQUEST: ${{ github.event.issue.body }}
+        run: python robot/synthese.py
+      - name: Enregistrement et réponse
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE: ${{ github.event.issue.number }}
+        run: |
+          git config user.name "actu-robot"
+          git config user.email "actu-robot@users.noreply.github.com"
+          git add app/data/syntheses
+          if git diff --cached --quiet; then
+            gh issue comment "$ISSUE" --body "La synthèse n'a pas pu être faite (voir le journal du robot)."
+            exit 1
+          fi
+          git commit -m "Synthèse de recherche"
+          for i in 1 2 3 4 5; do git pull --rebase -q && git push && break; sleep 15; done
+          gh issue comment "$ISSUE" --body "Synthèse prête : elle s'affiche dans ACTU, onglet Recherche."
+          gh issue close "$ISSUE"

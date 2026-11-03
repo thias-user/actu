@@ -5,3 +5,4 @@ __pycache__/
 robot/state/
 code-lecture-actu.txt
 robot/models/
+robot/llm/

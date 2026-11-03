@@ -16,7 +16,7 @@ puis Partager → « Sur l'écran d'accueil ». Adresse : https://thias-user.git
 | **Explorer** | Tous les articles collectés, à trier par thème, date, source ou importance, et à filtrer par région, période ou mot-clé. |
 | **Le 20h** | Les journaux de 20h de TF1 (TF1+) et de France 2 (france.tv) des 14 derniers jours, avec les sujets du JT de TF1. |
 | **ARTE** | Les documentaires et reportages en accès libre sur les chaînes YouTube d'ARTE (sans concerts ni films), classés par sujet (géopolitique, histoire, psychologie et quête de sens, philosophie, art…) et par région du monde. La recherche porte sur les titres, les descriptions complètes et les mots-clés des vidéos, tolère pluriels et petites fautes, et classe par pertinence. Miniatures en haute définition. |
-| **Recherche** | Recherche par mots-clés dans les publications scientifiques (OpenAlex, HAL), et une sélection par thème renouvelée tous les 3 mois. |
+| **Recherche** | Recherche par mots-clés dans les publications scientifiques (OpenAlex, HAL), et une sélection par thème renouvelée tous les 3 mois. Choisissez 1 à 5 articles (＋ Synthèse) : un agent IA en fait une synthèse sur le modèle de l'épreuve de la BCE (voir plus bas). |
 
 Dans **Réglages** (roue dentée) : régions affichées, leur ordre et le **nombre d'articles par région (jusqu'à tous)**, la **traduction en
 français**, centres d'intérêt, **thèmes personnalisés**, et le **code de lecture** qui permet de lire les articles en accès libre en entier dans l'application.
@@ -60,6 +60,28 @@ puis vérifie chaque fiche Wikipédia contre l'article avant de la garder (mieux
 définitions évidentes, comme « école maternelle », sont écartées). Le pays en bref vient de la Banque mondiale et de Wikidata,
 relus chaque semaine. Les fiches sont gardées dans le cache du robot. Le schéma est chiffré avec le code de lecture ; sans code,
 l'application en fait une version courte à partir du titre et du résumé, avec le pays en bref.
+
+Pour les articles à la une (les trois premiers de chaque région), la case « Regard critique » commence par une **analyse
+argumentée rédigée par une IA libre** (Qwen3-4B, licence Apache 2.0) qui tourne sur la machine de GitHub : ce qui est établi,
+ce qui reste fragile, le point de vue adopté et les voix qui manquent, les enjeux. Les textes ne quittent pas la machine du
+robot ; toute phrase de l'IA qui cite un nom ou un chiffre absent de l'article est retirée.
+
+## Synthèse de recherche par l'IA
+
+Dans **Recherche**, choisissez 1 à 5 publications puis « Synthèse » : ACTU ouvre une demande GitHub pré-remplie, que vous
+validez (« Submit new issue », avec votre compte GitHub). Le robot (`robot/synthese.py`, déclenché seulement par les demandes
+du propriétaire du projet) lit chaque texte en accès libre (à défaut, le résumé des auteurs), en fait une fiche de lecture, puis :
+- **un article** : un résumé fidèle d'environ 250 mots et un regard critique (forces, limites, portée, questions ouvertes) ;
+- **plusieurs articles** : une synthèse conforme à l'épreuve de synthèse de textes de la BCE (ESCP, HEC) — 300 mots (± 10 %),
+  une problématique sous forme de question, trois parties ouvertes chacune par une sous-question et qui confrontent tous les
+  auteurs, nommés, sans citation ni avis ni conclusion —, contrôlée (longueur, auteurs, questions), relue et notée par un
+  « jury » et corrigée jusqu'à trois fois ; puis les articles **se répondent et se critiquent** (ce que chacun oppose aux
+  autres, accords, désaccords, angles morts, questions ouvertes).
+
+Gratuit et sans clé : le modèle ouvert GPT-OSS 20B du service Pollinations (une réponse toutes les 45 secondes, d'où 5 à
+20 minutes par synthèse) et Jina Reader pour lire les textes en accès libre. Le résultat est chiffré avec le code de lecture
+(`app/data/syntheses/`) ; ACTU le récupère tout seul et le garde dans « Mes synthèses ». Seule la liste des articles demandés
+apparaît en clair, dans la demande GitHub.
 
 ## Comment ça marche
 
